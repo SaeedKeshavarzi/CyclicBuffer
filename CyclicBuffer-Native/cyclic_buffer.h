@@ -19,6 +19,7 @@ private:
 	const LONG overwriting_step;
 
 	char **data, **write_point, **read_point, **last_point;
+	char *write_packet, *read_packet;
 	volatile LONG size;
 	spin_lock sync;
 
@@ -26,6 +27,10 @@ private:
 	manual_reset_event read_enable;
 
 public:
+	static const bool is_lock_free = true;
+	cyclic_buffer(const cyclic_buffer&);
+	cyclic_buffer& operator=(const cyclic_buffer&);
+
 	explicit cyclic_buffer(const LONG _capacity, const LONG _element_size,
 		const LONG _unlock_threshold = 1, const LONG _overwriting_step = 1) :
 	capacity(_capacity),
@@ -37,6 +42,9 @@ public:
 		{
 			data[i] = new char[_element_size];
 		}
+
+		write_packet = new char[_element_size];
+		read_packet = new char[_element_size];
 
 		write_point = read_point = data;
 		last_point = data + _capacity - 1;
@@ -57,6 +65,9 @@ public:
 		{
 			delete[] data[i];
 		}
+
+		delete[] write_packet;
+		delete[] read_packet;
 
 		delete[] data;
 	}
@@ -110,6 +121,11 @@ public:
 		}
 	}
 
+	inline void push()
+	{
+		this->push(&write_packet);
+	}
+
 	inline void pop(char ** const read_cache)
 	{
 		this->wait();
@@ -129,12 +145,27 @@ public:
 		}
 	}
 
+	inline void pop()
+	{
+		this->pop(&read_packet);
+	}
+
 	inline void wait()
 	{
 		if (!read_enable.is_set() && !terminated)
 		{
 			read_enable.wait();
 		}
+	}
+
+	inline char** get_write_packet()
+	{
+		return &write_packet;
+	}
+
+	inline char** get_read_packet()
+	{
+		return &read_packet;
 	}
 
 	inline LONG get_capacity() const
@@ -155,10 +186,15 @@ private:
 	const LONG capacity;
 
 	char **data, **write_point, **read_point, **last_point;
+	char *write_packet, *read_packet;
 	hystersis_counter_lock size;
 	bool terminated;
 
 public:
+	static const bool is_lock_free = false;
+	cyclic_buffer(const cyclic_buffer&);
+	cyclic_buffer& operator=(const cyclic_buffer&);
+
 	explicit cyclic_buffer(const LONG _capacity, const LONG _element_size,
 		const LONG _unlock_threshold_down = 1, const LONG _unlock_threshold_up = 1) :
 	capacity(_capacity),
@@ -169,6 +205,9 @@ public:
 		{
 			data[i] = new char[_element_size];
 		}
+
+		write_packet = new char[_element_size];
+		read_packet = new char[_element_size];
 
 		write_point = read_point = data;
 		last_point = data + _capacity - 1;
@@ -187,6 +226,9 @@ public:
 		{
 			delete[] data[i];
 		}
+
+		delete[] write_packet;
+		delete[] read_packet;
 
 		delete[] data;
 	}
@@ -211,6 +253,11 @@ public:
 		size.add();
 	}
 
+	inline void push()
+	{
+		this->push(&write_packet);
+	}
+
 	inline void pop(char ** const read_cache)
 	{
 		size.wait_for_sub();
@@ -225,6 +272,11 @@ public:
 		size.sub();
 	}
 
+	inline void pop()
+	{
+		this->pop(&read_packet);
+	}
+
 	inline void wait_for_space()
 	{
 		size.wait_for_add();
@@ -233,6 +285,16 @@ public:
 	inline void wait_for_data()
 	{
 		size.wait_for_sub();
+	}
+
+	inline char** get_write_packet()
+	{
+		return &write_packet;
+	}
+
+	inline char** get_read_packet()
+	{
+		return &read_packet;
 	}
 
 	inline LONG get_capacity() const
