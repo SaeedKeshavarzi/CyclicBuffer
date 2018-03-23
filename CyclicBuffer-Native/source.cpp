@@ -1,5 +1,7 @@
+#define EXTERNAL_PACKET
 #define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
+#include <stdint.h>
 #include <Windows.h>
 
 #include "cyclic_buffer.h"
@@ -9,37 +11,61 @@ volatile bool is_finished(false);
 
 DWORD WINAPI producer(LPVOID lpParam)
 {
-	int *data = new int[1];
-	int cnt = 0;
+#ifdef EXTERNAL_PACKET
+	int32_t *data = new int32_t[1];
 
-	data[0] = 0;
-	while (!is_finished)
+	for (int32_t cnt = 0; !is_finished; ++cnt)
 	{
+		*data = cnt;
 		buffer.push((char**)(&data));
-		(*data) = ++cnt;
 	}
 
-	printf("producer say goodbye\n");
 	delete[] data;
+#else
+	for (int32_t cnt = 0; !is_finished; ++cnt)
+	{
+		**(int32_t**)buffer.get_write_packet() = cnt;
+		buffer.push();
+	}
+#endif // EXTERNAL_PACKET
+
+	printf("producer say goodbye\n");
 	return 0;
 }
 
 DWORD WINAPI consumer(LPVOID lpParam)
 {
-	int *data = new int[1], cnt;
-	int curr, last(-1);
+#ifdef EXTERNAL_PACKET
+	int32_t *data( new int32_t[1] );
+#else
+	int32_t *data( *(int32_t**)buffer.get_read_packet() );
+#endif // EXTERNAL_PACKET
+
+	int32_t cnt, curr, last( -1 );
 
 	auto _1 = clock();
 
 	for (cnt = 0; cnt < 100000000; ++cnt)
 	{
 		*data = -(1 + cnt);
+
+#ifdef EXTERNAL_PACKET
 		buffer.pop((char**)(&data));
+#else
+		buffer.pop();
+		data = *(int32_t**)buffer.get_read_packet();
+#endif // EXTERNAL_PACKET
 
 		curr = *data;
 
-		//if ((curr < 0) || (curr < last))
-		if (curr != cnt)
+		if (buffer.is_lock_free)
+		{
+			if ((curr < 0) || (curr < last))
+			{
+				printf("Error: %d : %d \n", cnt, *data);
+			}
+		}
+		else if (curr != cnt)
 		{
 			printf("Error: %d : %d \n", cnt, *data);
 		}
@@ -54,7 +80,10 @@ DWORD WINAPI consumer(LPVOID lpParam)
 	printf("%d ms\n", _2 - _1);
 
 	buffer.terminate();
+
+#ifdef EXTERNAL_PACKET
 	delete[] data;
+#endif // EXTERNAL_PACKET
 	return 0;
 }
 
