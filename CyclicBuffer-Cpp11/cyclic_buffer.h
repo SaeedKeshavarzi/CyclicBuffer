@@ -27,7 +27,7 @@ private:
 	manual_reset_event read_enable;
 
 public:
-	const bool is_lock_free{ true };
+	static const bool is_lock_free{ true };
 	cyclic_buffer(const cyclic_buffer&) = delete;
 	cyclic_buffer& operator=(const cyclic_buffer&) = delete;
 
@@ -176,7 +176,7 @@ private:
 	bool terminated;
 
 public:
-	const bool is_lock_free{ false };
+	static const bool is_lock_free{ false };
 	cyclic_buffer(const cyclic_buffer&) = delete;
 	cyclic_buffer& operator=(const cyclic_buffer&) = delete;
 
