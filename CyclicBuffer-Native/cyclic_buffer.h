@@ -38,7 +38,7 @@ public:
 		overwriting_step(_overwriting_step)
 	{
 		data = (void**)malloc(_capacity * sizeof(void*));
-		for (int i = 0; i < _capacity; ++i)
+		for (LONG i = 0; i < _capacity; ++i)
 		{
 			data[i] = malloc(_element_size);
 		}
@@ -61,7 +61,7 @@ public:
 			terminate();
 		}
 
-		for (int i = 0; i < capacity; ++i)
+		for (LONG i = 0; i < capacity; ++i)
 		{
 			free(data[i]);
 		}
@@ -201,7 +201,7 @@ public:
 		size(_capacity, _unlock_threshold_down, _unlock_threshold_up, 0)
 	{
 		data = (void**)malloc(_capacity * sizeof(void*));
-		for (int i = 0; i < _capacity; ++i)
+		for (LONG i = 0; i < _capacity; ++i)
 		{
 			data[i] = malloc(_element_size);
 		}
@@ -222,7 +222,7 @@ public:
 			terminate();
 		}
 
-		for (int i = 0; i < capacity; ++i)
+		for (LONG i = 0; i < capacity; ++i)
 		{
 			free(data[i]);
 		}
