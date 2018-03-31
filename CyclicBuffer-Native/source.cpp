@@ -17,7 +17,7 @@ DWORD WINAPI producer(LPVOID lpParam)
 	for (int32_t cnt = 0; !is_finished; ++cnt)
 	{
 		*data = cnt;
-		buffer.push((char**)(&data));
+		buffer.push((void**)(&data));
 	}
 
 	delete[] data;
@@ -50,7 +50,7 @@ DWORD WINAPI consumer(LPVOID lpParam)
 		*data = -(1 + cnt);
 
 #ifdef EXTERNAL_PACKET
-		buffer.pop((char**)(&data));
+		buffer.pop((void**)(&data));
 #else
 		buffer.pop();
 		data = *(int32_t**)buffer.get_read_packet();
