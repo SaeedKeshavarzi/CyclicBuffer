@@ -18,8 +18,8 @@ private:
 	const LONG unlock_threshold;
 	const LONG overwriting_step;
 
-	char **data, **write_point, **read_point, **last_point;
-	char *write_packet, *read_packet;
+	void **data, **write_point, **read_point, **last_point;
+	void *write_packet, *read_packet;
 	volatile LONG size;
 	spin_lock sync;
 
@@ -37,14 +37,14 @@ public:
 		unlock_threshold(_unlock_threshold ),
 		overwriting_step(_overwriting_step)
 	{
-		data = new char*[_capacity];
-		for (LONG i = 0; i < _capacity; ++i)
+		data = (void**)malloc(_capacity * sizeof(void*));
+		for (int i = 0; i < _capacity; ++i)
 		{
-			data[i] = new char[_element_size];
+			data[i] = malloc(_element_size);
 		}
 
-		write_packet = new char[_element_size];
-		read_packet = new char[_element_size];
+		write_packet = malloc(_element_size);
+		read_packet = malloc(_element_size);
 
 		write_point = read_point = data;
 		last_point = data + _capacity - 1;
@@ -61,15 +61,15 @@ public:
 			terminate();
 		}
 
-		for (LONG i = 0; i < capacity; ++i)
+		for (int i = 0; i < capacity; ++i)
 		{
-			delete[] data[i];
+			free(data[i]);
 		}
 
-		delete[] write_packet;
-		delete[] read_packet;
+		free(write_packet);
+		free(read_packet);
 
-		delete[] data;
+		free((void*)data);
 	}
 
 	inline void terminate()
@@ -78,10 +78,10 @@ public:
 		read_enable.set();
 	}
 
-	inline void push(char ** const write_cache)
+	inline void push(void ** const write_cache)
 	{
 		{
-			char *aux = *write_point;
+			void *aux = *write_point;
 			*write_point = *write_cache;
 			*write_cache = aux;
 		}
@@ -126,13 +126,13 @@ public:
 		this->push(&write_packet);
 	}
 
-	inline void pop(char ** const read_cache)
+	inline void pop(void ** const read_cache)
 	{
 		this->wait();
 
 		sync.lock();
 		{
-			char *aux = *read_point;
+			void *aux = *read_point;
 			*read_point = *read_cache;
 			*read_cache = aux;
 		}
@@ -158,12 +158,12 @@ public:
 		}
 	}
 
-	inline char** get_write_packet()
+	inline void** get_write_packet()
 	{
 		return &write_packet;
 	}
 
-	inline char** get_read_packet()
+	inline void** get_read_packet()
 	{
 		return &read_packet;
 	}
@@ -185,8 +185,8 @@ class cyclic_buffer<false>
 private:
 	const LONG capacity;
 
-	char **data, **write_point, **read_point, **last_point;
-	char *write_packet, *read_packet;
+	void **data, **write_point, **read_point, **last_point;
+	void *write_packet, *read_packet;
 	hystersis_counter_lock size;
 	bool terminated;
 
@@ -200,14 +200,14 @@ public:
 	capacity(_capacity),
 		size(_capacity, _unlock_threshold_down, _unlock_threshold_up, 0)
 	{
-		data = new char*[_capacity];
-		for (LONG i = 0; i < _capacity; ++i)
+		data = (void**)malloc(_capacity * sizeof(void*));
+		for (int i = 0; i < _capacity; ++i)
 		{
-			data[i] = new char[_element_size];
+			data[i] = malloc(_element_size);
 		}
 
-		write_packet = new char[_element_size];
-		read_packet = new char[_element_size];
+		write_packet = malloc(_element_size);
+		read_packet = malloc(_element_size);
 
 		write_point = read_point = data;
 		last_point = data + _capacity - 1;
@@ -222,15 +222,15 @@ public:
 			terminate();
 		}
 
-		for (LONG i = 0; i < capacity; ++i)
+		for (int i = 0; i < capacity; ++i)
 		{
-			delete[] data[i];
+			free(data[i]);
 		}
 
-		delete[] write_packet;
-		delete[] read_packet;
+		free(write_packet);
+		free(read_packet);
 
-		delete[] data;
+		free((void*)data);
 	}
 
 	inline void terminate()
@@ -239,12 +239,12 @@ public:
 		size.terminate();
 	}
 
-	inline void push(char ** const write_cache)
+	inline void push(void ** const write_cache)
 	{
 		size.wait_for_add();
 
 		{
-			char *aux = *write_point;
+			void *aux = *write_point;
 			*write_point = *write_cache;
 			*write_cache = aux;
 		}
@@ -258,12 +258,12 @@ public:
 		this->push(&write_packet);
 	}
 
-	inline void pop(char ** const read_cache)
+	inline void pop(void ** const read_cache)
 	{
 		size.wait_for_sub();
 
 		{
-			char *aux = (char*)(*read_point);
+			void *aux = (void*)(*read_point);
 			*read_point = *read_cache;
 			*read_cache = aux;
 		}
@@ -287,12 +287,12 @@ public:
 		size.wait_for_sub();
 	}
 
-	inline char** get_write_packet()
+	inline void** get_write_packet()
 	{
 		return &write_packet;
 	}
 
-	inline char** get_read_packet()
+	inline void** get_read_packet()
 	{
 		return &read_packet;
 	}
