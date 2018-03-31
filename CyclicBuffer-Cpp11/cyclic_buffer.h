@@ -17,10 +17,10 @@ private:
 	const int unlock_threshold;
 	const int overwriting_step;
 
-	char **data, **write_point, **last_point;
-	char *write_packet, *read_packet;
+	void **data, **write_point, **last_point;
+	void *write_packet, *read_packet;
 	std::atomic_flag sync = ATOMIC_FLAG_INIT;
-	std::atomic<char**> read_point;
+	std::atomic<void**> read_point;
 	std::atomic<int> size;
 
 	bool terminated;
@@ -35,20 +35,20 @@ public:
 		const int _unlock_threshold = 1, const int _overwriting_step = 1) :
 		capacity{ _capacity },
 		unlock_threshold{ _unlock_threshold },
-		overwriting_step{ _overwriting_step }
+		overwriting_step{ _overwriting_step },
+		size { 0 }
 	{
-		data = new char*[_capacity];
+		data = (void**)malloc(_capacity * sizeof(void*));
 		for (int i = 0; i < _capacity; ++i)
 		{
-			data[i] = new char[_element_size];
+			data[i] = malloc(_element_size);
 		}
 
-		write_packet = new char[_element_size];
-		read_packet = new char[_element_size];
+		write_packet = malloc(_element_size);
+		read_packet = malloc(_element_size);
 
 		write_point = read_point = data;
 		last_point = data + _capacity - 1;
-		size = 0;
 
 		terminated = false;
 		read_enable.reset();
@@ -63,13 +63,13 @@ public:
 
 		for (int i = 0; i < capacity; ++i)
 		{
-			delete[] data[i];
+			free(data[i]);
 		}
 
-		delete[] write_packet;
-		delete[] read_packet;
+		free(write_packet);
+		free(read_packet);
 
-		delete[] data;
+		free((void*)data);
 	}
 
 	inline void terminate()
@@ -78,7 +78,7 @@ public:
 		read_enable.set();
 	}
 
-	inline void push(char ** const write_cache)
+	inline void push(void ** const write_cache)
 	{
 		std::swap(*write_point, *write_cache);
 		(write_point == last_point ? write_point = data : ++write_point);
@@ -115,7 +115,7 @@ public:
 		this->push(&write_packet);
 	}
 
-	inline void pop(char ** const read_cache)
+	inline void pop(void ** const read_cache)
 	{
 		this->wait();
 
@@ -143,12 +143,12 @@ public:
 		}
 	}
 
-	inline char** get_write_packet()
+	inline void** get_write_packet()
 	{
 		return &write_packet;
 	}
 
-	inline char** get_read_packet()
+	inline void** get_read_packet()
 	{
 		return &read_packet;
 	}
@@ -170,8 +170,8 @@ class cyclic_buffer<false>
 private:
 	const int capacity;
 
-	char **data, **write_point, **read_point, **last_point;
-	char *write_packet, *read_packet;
+	void **data, **write_point, **read_point, **last_point;
+	void *write_packet, *read_packet;
 	hystersis_counter_lock size;
 	bool terminated;
 
@@ -185,14 +185,14 @@ public:
 		capacity{ _capacity },
 		size{ _capacity, _unlock_threshold_down, _unlock_threshold_up, 0 }
 	{
-		data = new char*[_capacity];
+		data = (void**)malloc(_capacity * sizeof(void*));
 		for (int i = 0; i < _capacity; ++i)
 		{
-			data[i] = new char[_element_size];
+			data[i] = malloc(_element_size);
 		}
 
-		write_packet = new char[_element_size];
-		read_packet = new char[_element_size];
+		write_packet = malloc(_element_size);
+		read_packet = malloc(_element_size);
 
 		write_point = read_point = data;
 		last_point = data + _capacity - 1;
@@ -209,13 +209,13 @@ public:
 
 		for (int i = 0; i < capacity; ++i)
 		{
-			delete[] data[i];
+			free(data[i]);
 		}
 
-		delete[] write_packet;
-		delete[] read_packet;
+		free(write_packet);
+		free(read_packet);
 
-		delete[] data;
+		free((void*)data);
 	}
 
 	inline void terminate()
@@ -224,7 +224,7 @@ public:
 		size.terminate();
 	}
 
-	inline void push(char ** const write_cache)
+	inline void push(void ** const write_cache)
 	{
 		size.wait_for_add();
 
@@ -239,7 +239,7 @@ public:
 		this->push(&write_packet);
 	}
 
-	inline void pop(char ** const read_cache)
+	inline void pop(void ** const read_cache)
 	{
 		size.wait_for_sub();
 
@@ -264,12 +264,12 @@ public:
 		size.wait_for_sub();
 	}
 
-	inline char** get_write_packet()
+	inline void** get_write_packet()
 	{
 		return &write_packet;
 	}
 
-	inline char** get_read_packet()
+	inline void** get_read_packet()
 	{
 		return &read_packet;
 	}
