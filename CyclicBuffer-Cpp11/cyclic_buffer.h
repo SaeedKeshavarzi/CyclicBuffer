@@ -6,46 +6,51 @@
 #include "resettable_event.h"
 #include "hystersis_counter_lock.h"
 
-template<bool lock_free>
+template<typename _Ty, bool lock_free>
 class cyclic_buffer;
 
-template<>
-class cyclic_buffer<true>
+template<typename _Ty>
+class cyclic_buffer<_Ty, true>
 {
+public:
+	static constexpr bool is_lock_free{ true };
+
+	typedef _Ty value_type;
+	typedef cyclic_buffer<_Ty, true> type;
+
 private:
 	const int capacity;
 	const int unlock_threshold;
 	const int overwriting_step;
 
-	void **data, **write_point, **last_point;
-	void *write_packet, *read_packet;
+	value_type **data, **write_point, **last_point;
+	value_type *write_packet, *read_packet;
 	std::atomic_flag sync = ATOMIC_FLAG_INIT;
-	std::atomic<void**> read_point;
+	std::atomic<value_type**> read_point;
 	std::atomic<int> size;
 
 	bool terminated;
 	manual_reset_event read_enable;
 
 public:
-	static const bool is_lock_free{ true };
 	cyclic_buffer(const cyclic_buffer&) = delete;
 	cyclic_buffer& operator=(const cyclic_buffer&) = delete;
 
-	cyclic_buffer(const int _capacity, const int _element_size,
+	cyclic_buffer(const int _capacity, const int _element_size = 1,
 		const int _unlock_threshold = 1, const int _overwriting_step = 1) :
 		capacity{ _capacity },
 		unlock_threshold{ _unlock_threshold },
 		overwriting_step{ _overwriting_step },
 		size { 0 }
 	{
-		data = (void**)malloc(_capacity * sizeof(void*));
+		data = new value_type*[_capacity];
 		for (int i = 0; i < _capacity; ++i)
 		{
-			data[i] = malloc(_element_size);
+			data[i] = new value_type[_element_size];
 		}
 
-		write_packet = malloc(_element_size);
-		read_packet = malloc(_element_size);
+		write_packet = new value_type[_element_size];
+		read_packet = new value_type[_element_size];
 
 		write_point = read_point = data;
 		last_point = data + _capacity - 1;
@@ -63,13 +68,13 @@ public:
 
 		for (int i = 0; i < capacity; ++i)
 		{
-			free(data[i]);
+			delete[] data[i];
 		}
 
-		free(write_packet);
-		free(read_packet);
+		delete write_packet;
+		delete read_packet;
 
-		free((void*)data);
+		delete[] data;
 	}
 
 	inline void terminate()
@@ -78,7 +83,7 @@ public:
 		read_enable.set();
 	}
 
-	inline void push(void ** const write_cache)
+	inline void push(value_type ** const write_cache)
 	{
 		std::swap(*write_point, *write_cache);
 		(write_point == last_point ? write_point = data : ++write_point);
@@ -115,7 +120,7 @@ public:
 		this->push(&write_packet);
 	}
 
-	inline void pop(void ** const read_cache)
+	inline void pop(value_type ** const read_cache)
 	{
 		this->wait();
 
@@ -143,12 +148,12 @@ public:
 		}
 	}
 
-	inline void** get_write_packet()
+	inline value_type** get_write_packet()
 	{
 		return &write_packet;
 	}
 
-	inline void** get_read_packet()
+	inline value_type** get_read_packet()
 	{
 		return &read_packet;
 	}
@@ -164,35 +169,40 @@ public:
 	}
 };
 
-template<>
-class cyclic_buffer<false>
+template<typename _Ty>
+class cyclic_buffer<_Ty, false>
 {
+public:
+	static constexpr bool is_lock_free{ false };
+
+	typedef _Ty value_type;
+	typedef cyclic_buffer<_Ty, false> type;
+
 private:
 	const int capacity;
 
-	void **data, **write_point, **read_point, **last_point;
-	void *write_packet, *read_packet;
+	value_type **data, **write_point, **read_point, **last_point;
+	value_type *write_packet, *read_packet;
 	hystersis_counter_lock size;
 	bool terminated;
 
 public:
-	static const bool is_lock_free{ false };
 	cyclic_buffer(const cyclic_buffer&) = delete;
 	cyclic_buffer& operator=(const cyclic_buffer&) = delete;
 
-	cyclic_buffer(const int _capacity, const int _element_size,
+	cyclic_buffer(const int _capacity, const int _element_size = 1,
 		const int _unlock_threshold_down = 1, const int _unlock_threshold_up = 1) :
 		capacity{ _capacity },
 		size{ _capacity, _unlock_threshold_down, _unlock_threshold_up, 0 }
 	{
-		data = (void**)malloc(_capacity * sizeof(void*));
+		data = new value_type*[_capacity];
 		for (int i = 0; i < _capacity; ++i)
 		{
-			data[i] = malloc(_element_size);
+			data[i] = new value_type[_element_size];
 		}
 
-		write_packet = malloc(_element_size);
-		read_packet = malloc(_element_size);
+		write_packet = new value_type[_element_size];
+		read_packet = new value_type[_element_size];
 
 		write_point = read_point = data;
 		last_point = data + _capacity - 1;
@@ -209,13 +219,13 @@ public:
 
 		for (int i = 0; i < capacity; ++i)
 		{
-			free(data[i]);
+			delete[] data[i];
 		}
 
-		free(write_packet);
-		free(read_packet);
+		delete write_packet;
+		delete read_packet;
 
-		free((void*)data);
+		delete[] data;
 	}
 
 	inline void terminate()
@@ -224,7 +234,7 @@ public:
 		size.terminate();
 	}
 
-	inline void push(void ** const write_cache)
+	inline void push(value_type ** const write_cache)
 	{
 		size.wait_for_add();
 
@@ -239,7 +249,7 @@ public:
 		this->push(&write_packet);
 	}
 
-	inline void pop(void ** const read_cache)
+	inline void pop(value_type ** const read_cache)
 	{
 		size.wait_for_sub();
 
@@ -264,12 +274,12 @@ public:
 		size.wait_for_sub();
 	}
 
-	inline void** get_write_packet()
+	inline value_type** get_write_packet()
 	{
 		return &write_packet;
 	}
 
-	inline void** get_read_packet()
+	inline value_type** get_read_packet()
 	{
 		return &read_packet;
 	}
