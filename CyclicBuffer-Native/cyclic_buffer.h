@@ -36,7 +36,7 @@ public:
 	cyclic_buffer(const cyclic_buffer&);
 	cyclic_buffer& operator=(const cyclic_buffer&);
 
-	cyclic_buffer(const LONG _capacity, const LONG _element_size,
+	cyclic_buffer(const LONG _capacity, const LONG _element_size = 1,
 		const LONG _unlock_threshold = 1, const LONG _overwriting_step = 1) :
 	capacity(_capacity),
 		unlock_threshold(_unlock_threshold ),
@@ -205,7 +205,7 @@ public:
 	cyclic_buffer(const cyclic_buffer&);
 	cyclic_buffer& operator=(const cyclic_buffer&);
 
-	cyclic_buffer(const LONG _capacity, const LONG _element_size,
+	cyclic_buffer(const LONG _capacity, const LONG _element_size = 1,
 		const LONG _unlock_threshold_down = 1, const LONG _unlock_threshold_up = 1) :
 	capacity(_capacity),
 		size(_capacity, _unlock_threshold_down, _unlock_threshold_up, 0)
