@@ -1,4 +1,4 @@
-//#define EXTERNAL_PACKET
+// #define EXTERNAL_PACKET
 #define _CRT_SECURE_NO_WARNINGS
 
 #include <stdio.h>
@@ -7,7 +7,7 @@
 #include "cyclic_buffer.h"
 #include "thread_naming.h"
 
-cyclic_buffer<true> buffer(10, 8, 3, 3);
+cyclic_buffer<int32_t, true> buffer(10, 8, 3, 3);
 volatile bool is_finished{ false };
 
 void producer()
@@ -18,14 +18,14 @@ void producer()
 	for (int32_t cnt = 0; !is_finished; ++cnt)
 	{
 		*data = cnt;
-		buffer.push((void**)(&data));
+		buffer.push(&data);
 	}
 
 	delete[] data;
 #else
 	for (int32_t cnt = 0; !is_finished; ++cnt)
 	{
-		**(int32_t**)buffer.get_write_packet() = cnt;
+		**buffer.get_write_packet() = cnt;
 		buffer.push();
 	}
 #endif // EXTERNAL_PACKET
@@ -38,7 +38,7 @@ void consumer()
 #ifdef EXTERNAL_PACKET
 	int32_t *data{ new int32_t[1] };
 #else
-	int32_t *data{ *(int32_t**)buffer.get_read_packet() };
+	int32_t *data{ *buffer.get_read_packet() };
 #endif // EXTERNAL_PACKET
 
 	int32_t cnt, curr, last{ -1 };
@@ -50,10 +50,10 @@ void consumer()
 		*data = -(1 + cnt);
 
 #ifdef EXTERNAL_PACKET
-		buffer.pop((void**)(&data));
+		buffer.pop(&data);
 #else
 		buffer.pop();
-		data = *(int32_t**)buffer.get_read_packet();
+		data = *buffer.get_read_packet();
 #endif // EXTERNAL_PACKET
 
 		curr = *data;
