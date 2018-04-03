@@ -44,7 +44,7 @@ public:
 		return this->wait_until(std::chrono::steady_clock::now() + rel_time);
 	}
 
-	virtual inline bool wait_until(const std::chrono::time_point<std::chrono::steady_clock>& timeout_time) = 0;
+	virtual inline bool wait_until(const std::chrono::time_point<std::chrono::steady_clock>& /*timeout_time*/) = 0;
 };
 
 class manual_reset_event : public resettable_event
