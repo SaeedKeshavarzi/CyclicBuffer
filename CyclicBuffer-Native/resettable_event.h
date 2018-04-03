@@ -65,7 +65,7 @@ public:
 		return this->wait_until(clock() + milliseconds);
 	}
 
-	virtual inline bool wait_until(const clock_t& timeout_time) = 0;
+	virtual inline bool wait_until(const clock_t& /*timeout_time*/) = 0;
 };
 
 class manual_reset_event : public resettable_event
