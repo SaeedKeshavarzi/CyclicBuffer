@@ -24,7 +24,7 @@ public:
 	hystersis_counter_lock(const hystersis_counter_lock&) = delete;
 	hystersis_counter_lock& operator=(const hystersis_counter_lock&) = delete;
 
-	explicit hystersis_counter_lock(const int _max_value,
+	hystersis_counter_lock(const int _max_value,
 		const int _unlock_threshold_down,
 		const int _unlock_threshold_up,
 		const int _initial_value = 0) :
@@ -44,6 +44,11 @@ public:
 
 		terminated = true;
 		cv.notify_all();
+	}
+
+	inline bool is_terminated() const
+	{
+		return terminated;
 	}
 
 	inline void add()
@@ -69,7 +74,7 @@ public:
 		}
 	}
 
-	inline void wait_for_add()
+	inline bool wait_for_add()
 	{
 		std::unique_lock<spin_lock> lock(sync);
 
@@ -77,6 +82,8 @@ public:
 		{
 			cv.wait(lock);
 		}
+
+		return !terminated;
 	}
 
 	inline void sub()
@@ -102,7 +109,7 @@ public:
 		}
 	}
 
-	inline void wait_for_sub()
+	inline bool wait_for_sub()
 	{
 		std::unique_lock<spin_lock> lock(sync);
 
@@ -110,6 +117,8 @@ public:
 		{
 			cv.wait(lock);
 		}
+
+		return !terminated;
 	}
 
 	inline int get_value() const
