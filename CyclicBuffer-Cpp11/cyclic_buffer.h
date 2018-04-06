@@ -20,6 +20,7 @@ public:
 
 private:
 	const int capacity;
+	const int element_size;
 	const int unlock_threshold;
 	const int overwriting_step;
 
@@ -39,18 +40,33 @@ public:
 	cyclic_buffer(const int _capacity, const int _element_size = 1,
 		const int _unlock_threshold = 1, const int _overwriting_step = 1) :
 		capacity{ _capacity },
+		element_size{ _element_size },
 		unlock_threshold{ _unlock_threshold },
 		overwriting_step{ _overwriting_step },
-		size { 0 }
+		size{ 0 }
 	{
 		data = new value_type*[_capacity];
-		for (int i = 0; i < _capacity; ++i)
-		{
-			data[i] = new value_type[_element_size];
-		}
 
-		write_packet = new value_type[_element_size];
-		read_packet = new value_type[_element_size];
+		if (_element_size == 1)
+		{
+			for (int i = 0; i < _capacity; ++i)
+			{
+				data[i] = new value_type();
+			}
+
+			write_packet = new value_type();
+			read_packet = new value_type();
+		}
+		else
+		{
+			for (int i = 0; i < _capacity; ++i)
+			{
+				data[i] = new value_type[_element_size];
+			}
+
+			write_packet = new value_type[_element_size];
+			read_packet = new value_type[_element_size];
+		}
 
 		write_point = read_point = data;
 		last_point = data + _capacity - 1;
@@ -66,13 +82,26 @@ public:
 			terminate();
 		}
 
-		for (int i = 0; i < capacity; ++i)
+		if (element_size == 1)
 		{
-			delete[] data[i];
-		}
+			for (int i = 0; i < capacity; ++i)
+			{
+				delete data[i];
+			}
 
-		delete write_packet;
-		delete read_packet;
+			delete write_packet;
+			delete read_packet;
+		}
+		else
+		{
+			for (int i = 0; i < capacity; ++i)
+			{
+				delete[] data[i];
+			}
+
+			delete[] write_packet;
+			delete[] read_packet;
+		}
 
 		delete[] data;
 	}
@@ -81,6 +110,11 @@ public:
 	{
 		terminated = true;
 		read_enable.set();
+	}
+
+	inline bool is_terminated() const
+	{
+		return terminated;
 	}
 
 	inline void push(value_type ** const write_cache)
@@ -122,7 +156,10 @@ public:
 
 	inline void pop(value_type ** const read_cache)
 	{
-		this->wait();
+		if (!this->wait())
+		{
+			return;
+		}
 
 		while (sync.test_and_set(std::memory_order_acquire));
 		std::swap(*read_point.load(), *read_cache);
@@ -140,12 +177,14 @@ public:
 		this->pop(&read_packet);
 	}
 
-	inline void wait()
+	inline bool wait()
 	{
 		if (!read_enable.is_set() && !terminated)
 		{
 			read_enable.wait();
 		}
+
+		return !terminated;
 	}
 
 	inline value_type** get_write_packet()
@@ -180,6 +219,7 @@ public:
 
 private:
 	const int capacity;
+	const int element_size;
 
 	value_type **data, **write_point, **read_point, **last_point;
 	value_type *write_packet, *read_packet;
@@ -193,16 +233,31 @@ public:
 	cyclic_buffer(const int _capacity, const int _element_size = 1,
 		const int _unlock_threshold_down = 1, const int _unlock_threshold_up = 1) :
 		capacity{ _capacity },
+		element_size{ _element_size },
 		size{ _capacity, _unlock_threshold_down, _unlock_threshold_up, 0 }
 	{
 		data = new value_type*[_capacity];
-		for (int i = 0; i < _capacity; ++i)
-		{
-			data[i] = new value_type[_element_size];
-		}
 
-		write_packet = new value_type[_element_size];
-		read_packet = new value_type[_element_size];
+		if (_element_size == 1)
+		{
+			for (int i = 0; i < _capacity; ++i)
+			{
+				data[i] = new value_type();
+			}
+
+			write_packet = new value_type();
+			read_packet = new value_type();
+		}
+		else
+		{
+			for (int i = 0; i < _capacity; ++i)
+			{
+				data[i] = new value_type[_element_size];
+			}
+
+			write_packet = new value_type[_element_size];
+			read_packet = new value_type[_element_size];
+		}
 
 		write_point = read_point = data;
 		last_point = data + _capacity - 1;
@@ -217,13 +272,26 @@ public:
 			terminate();
 		}
 
-		for (int i = 0; i < capacity; ++i)
+		if (element_size == 1)
 		{
-			delete[] data[i];
-		}
+			for (int i = 0; i < capacity; ++i)
+			{
+				delete data[i];
+			}
 
-		delete write_packet;
-		delete read_packet;
+			delete write_packet;
+			delete read_packet;
+		}
+		else
+		{
+			for (int i = 0; i < capacity; ++i)
+			{
+				delete[] data[i];
+			}
+
+			delete[] write_packet;
+			delete[] read_packet;
+		}
 
 		delete[] data;
 	}
@@ -234,9 +302,17 @@ public:
 		size.terminate();
 	}
 
+	inline bool is_terminated() const
+	{
+		return terminated;
+	}
+
 	inline void push(value_type ** const write_cache)
 	{
-		size.wait_for_add();
+		if (!size.wait_for_add())
+		{
+			return;
+		}
 
 		std::swap(*write_point, *write_cache);
 		(write_point == last_point ? write_point = data : ++write_point);
@@ -251,7 +327,10 @@ public:
 
 	inline void pop(value_type ** const read_cache)
 	{
-		size.wait_for_sub();
+		if (!size.wait_for_sub())
+		{
+			return;
+		}
 
 		std::swap(*read_point, *read_cache);
 		(read_point == last_point ? read_point = data : ++read_point);
@@ -264,14 +343,14 @@ public:
 		this->pop(&read_packet);
 	}
 
-	inline void wait_for_space()
+	inline bool wait_for_space()
 	{
-		size.wait_for_add();
+		return size.wait_for_add();
 	}
 
-	inline void wait_for_data()
+	inline bool wait_for_data()
 	{
-		size.wait_for_sub();
+		return size.wait_for_sub();
 	}
 
 	inline value_type** get_write_packet()
