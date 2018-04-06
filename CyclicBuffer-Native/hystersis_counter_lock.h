@@ -18,11 +18,11 @@ protected:
 	bool terminated;
 
 public:
-	explicit hystersis_counter_lock(const LONG _max_value,
+	hystersis_counter_lock(const LONG _max_value,
 		const LONG _unlock_threshold_down,
 		const LONG _unlock_threshold_up,
 		const LONG _initial_value = 0) :
-	max_value(_max_value),
+		max_value(_max_value),
 		unlock_threshold_down(_unlock_threshold_down),
 		unlock_threshold_up(_unlock_threshold_up)
 	{
@@ -50,6 +50,11 @@ public:
 		LeaveCriticalSection(&sync);
 	}
 
+	inline bool is_terminated() const
+	{
+		return terminated;
+	}
+
 	inline void add()
 	{
 		EnterCriticalSection(&sync);
@@ -75,7 +80,7 @@ public:
 		LeaveCriticalSection(&sync);
 	}
 
-	inline void wait_for_add()
+	inline bool wait_for_add()
 	{
 		EnterCriticalSection(&sync);
 
@@ -85,6 +90,8 @@ public:
 		}
 
 		LeaveCriticalSection(&sync);
+
+		return !terminated;
 	}
 
 	inline void sub()
@@ -112,7 +119,7 @@ public:
 		LeaveCriticalSection(&sync);
 	}
 
-	inline void wait_for_sub()
+	inline bool wait_for_sub()
 	{
 		EnterCriticalSection(&sync);
 
@@ -122,6 +129,8 @@ public:
 		}
 
 		LeaveCriticalSection(&sync);
+
+		return !terminated;
 	}
 
 	inline LONG get_value() const
