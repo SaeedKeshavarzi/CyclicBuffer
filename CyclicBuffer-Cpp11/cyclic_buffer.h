@@ -224,7 +224,6 @@ private:
 	value_type **data, **write_point, **read_point, **last_point;
 	value_type *write_packet, *read_packet;
 	hystersis_counter_lock size;
-	bool terminated;
 
 public:
 	cyclic_buffer(const cyclic_buffer&) = delete;
@@ -261,15 +260,13 @@ public:
 
 		write_point = read_point = data;
 		last_point = data + _capacity - 1;
-
-		terminated = false;
 	}
 
 	~cyclic_buffer()
 	{
-		if (!terminated)
+		if (!size.is_terminated())
 		{
-			terminate();
+			size.terminate();
 		}
 
 		if (element_size == 1)
@@ -298,13 +295,12 @@ public:
 
 	inline void terminate()
 	{
-		terminated = true;
 		size.terminate();
 	}
 
 	inline bool is_terminated() const
 	{
-		return terminated;
+		return size.is_terminated();
 	}
 
 	inline void push(value_type ** const write_cache)
