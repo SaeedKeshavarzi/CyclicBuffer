@@ -37,7 +37,7 @@ public:
 	cyclic_buffer(const cyclic_buffer&) = delete;
 	cyclic_buffer& operator=(const cyclic_buffer&) = delete;
 
-	cyclic_buffer(const int _capacity, const int _element_size = 1,
+	cyclic_buffer(const int _capacity, const int _element_size,
 		const int _unlock_threshold = 1, const int _overwriting_step = 1) :
 		capacity{ _capacity },
 		element_size{ _element_size },
@@ -187,14 +187,14 @@ public:
 		return !terminated;
 	}
 
-	inline value_type** get_write_packet()
+	inline value_type* get_write_packet() const
 	{
-		return &write_packet;
+		return write_packet;
 	}
 
-	inline value_type** get_read_packet()
+	inline value_type* get_read_packet() const
 	{
-		return &read_packet;
+		return read_packet;
 	}
 
 	inline int get_capacity() const
@@ -229,7 +229,7 @@ public:
 	cyclic_buffer(const cyclic_buffer&) = delete;
 	cyclic_buffer& operator=(const cyclic_buffer&) = delete;
 
-	cyclic_buffer(const int _capacity, const int _element_size = 1,
+	cyclic_buffer(const int _capacity, const int _element_size,
 		const int _unlock_threshold_down = 1, const int _unlock_threshold_up = 1) :
 		capacity{ _capacity },
 		element_size{ _element_size },
@@ -349,14 +349,14 @@ public:
 		return size.wait_for_sub();
 	}
 
-	inline value_type** get_write_packet()
+	inline value_type* get_write_packet() const
 	{
-		return &write_packet;
+		return write_packet;
 	}
 
-	inline value_type** get_read_packet()
+	inline value_type* get_read_packet() const
 	{
-		return &read_packet;
+		return read_packet;
 	}
 
 	inline int get_capacity() const
