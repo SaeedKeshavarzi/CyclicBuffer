@@ -7,8 +7,6 @@ class hystersis_counter_lock
 {
 protected:
 	const LONG max_value;
-	const LONG unlock_threshold_down;
-	const LONG unlock_threshold_up;
 
 	LONG volatile value;
 	bool add_lock, sub_lock;
@@ -18,13 +16,10 @@ protected:
 	bool terminated;
 
 public:
-	hystersis_counter_lock(const LONG _max_value,
-		const LONG _unlock_threshold_down,
-		const LONG _unlock_threshold_up,
-		const LONG _initial_value = 0) :
-		max_value(_max_value),
-		unlock_threshold_down(_unlock_threshold_down),
-		unlock_threshold_up(_unlock_threshold_up)
+	hystersis_counter_lock(const hystersis_counter_lock&);
+	hystersis_counter_lock& operator=(const hystersis_counter_lock&);
+
+	hystersis_counter_lock(const LONG _max_value, const LONG _initial_value = 0) : max_value(_max_value)
 	{
 		InitializeConditionVariable(&cv);
 		InitializeCriticalSectionAndSpinCount(&sync, INFINITE);
@@ -55,6 +50,11 @@ public:
 		return terminated;
 	}
 
+	inline LONG get_value() const
+	{
+		return value;
+	}
+
 	inline void add()
 	{
 		EnterCriticalSection(&sync);
@@ -64,34 +64,18 @@ public:
 			SleepConditionVariableCS(&cv, &sync, INFINITE);
 		}
 
-		const LONG &&copy = 1 + InterlockedIncrement(&value);
-
-		if (copy == max_value)
+		if (InterlockedIncrement(&value) == max_value)
 		{
 			add_lock = true;
 		}
 
-		if (sub_lock && (copy >= unlock_threshold_down))
+		if (sub_lock)
 		{
 			sub_lock = false;
 			WakeAllConditionVariable(&cv);
 		}
 
 		LeaveCriticalSection(&sync);
-	}
-
-	inline bool wait_for_add()
-	{
-		EnterCriticalSection(&sync);
-
-		while (add_lock && !terminated)
-		{
-			SleepConditionVariableCS(&cv, &sync, INFINITE);
-		}
-
-		LeaveCriticalSection(&sync);
-
-		return !terminated;
 	}
 
 	inline void sub()
@@ -103,14 +87,12 @@ public:
 			SleepConditionVariableCS(&cv, &sync, INFINITE);
 		}
 
-		const LONG &&copy = InterlockedDecrement(&value) - 1;
-
-		if (copy == 0)
+		if (InterlockedDecrement(&value) == 0)
 		{
 			sub_lock = true;
 		}
 
-		if (add_lock && (copy <= max_value - unlock_threshold_up))
+		if (add_lock)
 		{
 			add_lock = false;
 			WakeAllConditionVariable(&cv);
@@ -119,7 +101,19 @@ public:
 		LeaveCriticalSection(&sync);
 	}
 
-	inline bool wait_for_sub()
+	inline void wait_for_add()
+	{
+		EnterCriticalSection(&sync);
+
+		while (add_lock && !terminated)
+		{
+			SleepConditionVariableCS(&cv, &sync, INFINITE);
+		}
+
+		LeaveCriticalSection(&sync);
+	}
+
+	inline void wait_for_sub()
 	{
 		EnterCriticalSection(&sync);
 
@@ -129,13 +123,6 @@ public:
 		}
 
 		LeaveCriticalSection(&sync);
-
-		return !terminated;
-	}
-
-	inline LONG get_value() const
-	{
-		return value;
 	}
 };
 
