@@ -7,27 +7,24 @@
 #include "resettable_event.h"
 #include "hystersis_counter_lock.h"
 
-template<typename _Ty, bool lock_free>
+template<typename _Ty, bool lock_free = false, bool recyclable = false>
 class cyclic_buffer;
 
 template<typename _Ty>
-class cyclic_buffer<_Ty, true>
+class cyclic_buffer<_Ty, true, true>
 {
 public:
 	static const bool is_lock_free = true;
+	static const bool is_recyclable = true;
 
 	typedef _Ty value_type;
-	typedef cyclic_buffer<_Ty, true> type;
+	typedef cyclic_buffer<_Ty, true, true> type;
 
 private:
 	const LONG capacity;
-	const LONG element_size;
-	const LONG unlock_threshold;
-	const LONG overwriting_step;
 
-	value_type **data, **write_point, **read_point, **last_point;
-	value_type *write_packet, *read_packet;
-	volatile LONG size;
+	value_type *data, *write_point, *read_point, *last_point;
+	LONG volatile size;
 	spin_lock sync;
 
 	bool terminated;
@@ -37,37 +34,9 @@ public:
 	cyclic_buffer(const cyclic_buffer&);
 	cyclic_buffer& operator=(const cyclic_buffer&);
 
-	cyclic_buffer(const LONG _capacity, const LONG _element_size,
-		const LONG _unlock_threshold = 1, const LONG _overwriting_step = 1) :
-		capacity(_capacity),
-		element_size(_element_size),
-		unlock_threshold(_unlock_threshold),
-		overwriting_step(_overwriting_step)
+	cyclic_buffer(const LONG _capacity) : capacity(_capacity)
 	{
-		data = new value_type*[_capacity];
-
-		if (_element_size == 1)
-		{
-			for (LONG i = 0; i < _capacity; ++i)
-			{
-				data[i] = new value_type();
-			}
-
-			write_packet = new value_type();
-			read_packet = new value_type();
-		}
-		else
-		{
-			for (LONG i = 0; i < _capacity; ++i)
-			{
-				data[i] = new value_type[_element_size];
-			}
-
-			write_packet = new value_type[_element_size];
-			read_packet = new value_type[_element_size];
-		}
-
-		write_point = read_point = data;
+		write_point = read_point = data = (value_type*)malloc(_capacity * sizeof(value_type));
 		last_point = data + _capacity - 1;
 		size = 0;
 
@@ -82,28 +51,7 @@ public:
 			terminate();
 		}
 
-		if (element_size == 1)
-		{
-			for (LONG i = 0; i < capacity; ++i)
-			{
-				delete data[i];
-			}
-
-			delete write_packet;
-			delete read_packet;
-		}
-		else
-		{
-			for (LONG i = 0; i < capacity; ++i)
-			{
-				delete[] data[i];
-			}
-
-			delete[] write_packet;
-			delete[] read_packet;
-		}
-
-		delete[] data;
+		free(data);
 	}
 
 	inline void terminate()
@@ -117,99 +65,70 @@ public:
 		return terminated;
 	}
 
-	inline void push(value_type ** const write_cache)
+	inline value_type* get_data() const
 	{
-		{
-			value_type *aux = *write_point;
-			*write_point = *write_cache;
-			*write_cache = aux;
-		}
+		return data;
+	}
+
+	inline value_type push(const value_type& value)
+	{
+		value_type result = *write_point;
+		*write_point = value;
 		(write_point == last_point ? write_point = data : ++write_point);
 
-		bool not_overflow(true);
 		if (read_point == write_point)
 		{
 			sync.lock();
 
 			if (read_point == write_point)
 			{
-				read_point = data + ((read_point - data) + overwriting_step) % capacity;
-
-				{
-					LONG copy;
-					do
-					{
-						copy = size;
-					} while (InterlockedCompareExchange(&size, copy - overwriting_step + 1, copy) != copy);
-				}
-
-				not_overflow = false;
+				(read_point == last_point ? read_point = data : ++read_point);
+				sync.unlock();
 			}
-
-			sync.unlock();
+			else
+			{
+				sync.unlock();
+				InterlockedIncrement(&size);
+			}
 		}
-
-		if (not_overflow)
+		else
 		{
 			InterlockedIncrement(&size);
 		}
 
-		if (!read_enable.is_set() && (size >= unlock_threshold))
+		if (!read_enable.is_set() && (size > 0))
 		{
 			read_enable.set();
 		}
+
+		return result;
 	}
 
-	inline void push()
+	inline value_type pop(const value_type& value)
 	{
-		this->push(&write_packet);
-	}
-
-	inline void pop(value_type ** const read_cache)
-	{
-		if (!this->wait())
-		{
-			return;
-		}
+		value_type result;
+		this->wait_for_data();
 
 		sync.lock();
-		{
-			value_type *aux = *read_point;
-			*read_point = *read_cache;
-			*read_cache = aux;
-		}
+		result = *read_point;
+		*read_point = value;
 		(read_point == last_point ? read_point = data : ++read_point);
 		sync.unlock();
 
-		if ((InterlockedDecrement(&size) == 1) && !terminated)
+		if ((InterlockedDecrement(&size) == 0) && !terminated)
 		{
 			read_enable.reset();
 		}
+
+		return result;
 	}
 
-	inline void pop()
-	{
-		this->pop(&read_packet);
-	}
-
-	inline bool wait()
+	inline void wait_for_data()
 	{
 		if (!read_enable.is_set() && !terminated)
 		{
 			read_enable.wait();
 		}
-
-		return !terminated;
-	}
-
-	inline value_type* get_write_packet() const
-	{
-		return write_packet;
-	}
-
-	inline value_type* get_read_packet() const
-	{
-		return read_packet;
 	}
 
 	inline LONG get_capacity() const
@@ -224,56 +143,142 @@ public:
 };
 
 template<typename _Ty>
-class cyclic_buffer<_Ty, false>
+class cyclic_buffer<_Ty, true, false>
 {
 public:
-	static const bool is_lock_free = false;
+	static const bool is_lock_free = true;
+	static const bool is_recyclable = false;
 
 	typedef _Ty value_type;
-	typedef cyclic_buffer<_Ty, false> type;
+	typedef cyclic_buffer<_Ty, true, false> type;
 
 private:
 	const LONG capacity;
-	const LONG element_size;
 
-	value_type **data, **write_point, **read_point, **last_point;
-	value_type *write_packet, *read_packet;
+	value_type *data, *write_point, *last_point;
+	PVOID volatile read_point;
+	LONG volatile size;
+
+	bool terminated;
+	manual_reset_event read_enable;
+
+public:
+	cyclic_buffer(const cyclic_buffer&);
+	cyclic_buffer& operator=(const cyclic_buffer&);
+
+	cyclic_buffer(const LONG _capacity) : capacity(_capacity)
+	{
+		read_point = write_point = data = (value_type*)malloc(_capacity * sizeof(value_type));
+		last_point = data + _capacity - 1;
+		size = 0;
+
+		terminated = false;
+		read_enable.reset();
+	}
+
+	~cyclic_buffer()
+	{
+		if (!terminated)
+		{
+			terminate();
+		}
+
+		free(data);
+	}
+
+	inline void terminate()
+	{
+		terminated = true;
+		read_enable.set();
+	}
+
+	inline bool is_terminated() const
+	{
+		return terminated;
+	}
+
+	inline value_type* get_data() const
+	{
+		return data;
+	}
+
+	inline void push(const value_type& value)
+	{
+		*write_point = value;
+		(write_point == last_point ? write_point = data : ++write_point);
+
+		value_type* offset(write_point);
+		if (InterlockedCompareExchangePointer(&read_point, offset == last_point ? data : offset + 1, offset) != offset)
+		{
+			InterlockedIncrement(&size);
+		}
+
+		if (!read_enable.is_set() && (size > 0))
+		{
+			read_enable.set();
+		}
+	}
+
+	inline value_type pop()
+	{
+		this->wait_for_data();
+
+		value_type result, *offset;
+		do {
+			offset = (value_type*)read_point;
+			result = *offset;
+		} while (InterlockedCompareExchangePointer(&read_point, offset == last_point ? data : offset + 1, offset) != offset);
+
+		if ((InterlockedDecrement(&size) == 0) && !terminated)
+		{
+			read_enable.reset();
+		}
+
+		return result;
+	}
+
+	inline void wait_for_data()
+	{
+		if (!read_enable.is_set() && !terminated)
+		{
+			read_enable.wait();
+		}
+	}
+
+	inline LONG get_capacity() const
+	{
+		return capacity;
+	}
+
+	inline LONG get_size() const
+	{
+		return size;
+	}
+};
+
+template<typename _Ty>
+class cyclic_buffer<_Ty, false, true>
+{
+public:
+	static const bool is_lock_free = false;
+	static const bool is_recyclable = true;
+
+	typedef _Ty value_type;
+	typedef cyclic_buffer<_Ty, false, true> type;
+
+private:
+	const LONG capacity;
+
+	value_type *data, *write_point, *read_point, *last_point;
 	hystersis_counter_lock size;
 
 public:
 	cyclic_buffer(const cyclic_buffer&);
 	cyclic_buffer& operator=(const cyclic_buffer&);
 
-	cyclic_buffer(const LONG _capacity, const LONG _element_size,
-		const LONG _unlock_threshold_down = 1, const LONG _unlock_threshold_up = 1) :
-		capacity(_capacity),
-		element_size(_element_size),
-		size(_capacity, _unlock_threshold_down, _unlock_threshold_up, 0)
+	cyclic_buffer(const LONG _capacity) : capacity(_capacity), size(_capacity, 0)
 	{
-		data = new value_type*[_capacity];
-
-		if (_element_size == 1)
-		{
-			for (LONG i = 0; i < _capacity; ++i)
-			{
-				data[i] = new value_type();
-			}
-
-			write_packet = new value_type();
-			read_packet = new value_type();
-		}
-		else
-		{
-			for (LONG i = 0; i < _capacity; ++i)
-			{
-				data[i] = new value_type[_element_size];
-			}
-
-			write_packet = new value_type[_element_size];
-			read_packet = new value_type[_element_size];
-		}
-
-		write_point = read_point = data;
+		write_point = read_point = data = (value_type*)malloc(_capacity * sizeof(value_type));
 		last_point = data + _capacity - 1;
 	}
 
@@ -284,28 +289,7 @@ public:
 			size.terminate();
 		}
 
-		if (element_size == 1)
-		{
-			for (LONG i = 0; i < capacity; ++i)
-			{
-				delete data[i];
-			}
-
-			delete write_packet;
-			delete read_packet;
-		}
-		else
-		{
-			for (LONG i = 0; i < capacity; ++i)
-			{
-				delete[] data[i];
-			}
-
-			delete[] write_packet;
-			delete[] read_packet;
-		}
-
-		delete[] data;
+		free(data);
 	}
 
 	inline void terminate()
@@ -318,68 +302,151 @@ public:
 		return size.is_terminated();
 	}
 
-	inline void push(value_type ** const write_cache)
+	inline value_type* get_data() const
 	{
-		if (!size.wait_for_add())
+		return data;
+	}
+
+	inline value_type push(const value_type& value)
+	{
+		this->wait_for_space();
+
+		value_type result = *write_point;
+		*write_point = value;
+		(write_point == last_point ? write_point = data : ++write_point);
+
+		size.add();
+
+		return result;
+	}
+
+	inline value_type pop(const value_type& value)
+	{
+		this->wait_for_data();
+
+		value_type result = *read_point;
+		*read_point = value;
+		(read_point == last_point ? read_point = data : ++read_point);
+
+		size.sub();
+
+		return result;
+	}
+
+	inline void wait_for_space()
+	{
+		if (size.get_value() == capacity)
 		{
-			return;
+			size.wait_for_add();
+		}
+	}
+
+	inline void wait_for_data()
+	{
+		if (size.get_value() == 0)
+		{
+			size.wait_for_sub();
+		}
+	}
+
+	inline LONG get_capacity() const
+	{
+		return capacity;
+	}
+
+	inline LONG get_size() const
+	{
+		return size.get_value();
+	}
+};
+
+template<typename _Ty>
+class cyclic_buffer<_Ty, false, false>
+{
+public:
+	static const bool is_lock_free = false;
+	static const bool is_recyclable = false;
+
+	typedef _Ty value_type;
+	typedef cyclic_buffer<_Ty, false, false> type;
+
+private:
+	const LONG capacity;
+
+	value_type *data, *write_point, *read_point, *last_point;
+	hystersis_counter_lock size;
+
+public:
+	cyclic_buffer(const cyclic_buffer&);
+	cyclic_buffer& operator=(const cyclic_buffer&);
+
+	cyclic_buffer(const LONG _capacity) : capacity(_capacity), size(_capacity, 0)
+	{
+		write_point = read_point = data = (value_type*)malloc(_capacity * sizeof(value_type));
+		last_point = data + _capacity - 1;
+	}
+
+	~cyclic_buffer()
+	{
+		if (!size.is_terminated())
+		{
+			size.terminate();
 		}
 
-		{
-			value_type *aux = *write_point;
-			*write_point = *write_cache;
-			*write_cache = aux;
-		}
+		free(data);
+	}
+
+	inline void terminate()
+	{
+		size.terminate();
+	}
+
+	inline bool is_terminated() const
+	{
+		return size.is_terminated();
+	}
+
+	inline value_type* get_data() const
+	{
+		return data;
+	}
+
+	inline void push(const value_type& value)
+	{
+		this->wait_for_space();
+
+		*write_point = value;
 		(write_point == last_point ? write_point = data : ++write_point);
 
 		size.add();
 	}
 
-	inline void push()
+	inline value_type pop()
 	{
-		this->push(&write_packet);
-	}
+		this->wait_for_data();
 
-	inline void pop(value_type ** const read_cache)
-	{
-		if (!size.wait_for_sub())
-		{
-			return;
-		}
-
-		{
-			value_type *aux = (value_type*)(*read_point);
-			*read_point = *read_cache;
-			*read_cache = aux;
-		}
+		value_type result = *read_point;
 		(read_point == last_point ? read_point = data : ++read_point);
 
 		size.sub();
+
+		return result;
 	}
 
-	inline void pop()
+	inline void wait_for_space()
 	{
-		this->pop(&read_packet);
+		if (size.get_value() == capacity)
+		{
+			size.wait_for_add();
+		}
 	}
 
-	inline bool wait_for_space()
+	inline void wait_for_data()
 	{
-		return size.wait_for_add();
-	}
-
-	inline bool wait_for_data()
-	{
-		return size.wait_for_sub();
-	}
-
-	inline value_type* get_write_packet() const
-	{
-		return write_packet;
-	}
-
-	inline value_type* get_read_packet() const
-	{
-		return read_packet;
+		if (size.get_value() == 0)
+		{
+			size.wait_for_sub();
+		}
 	}
 
 	inline LONG get_capacity() const
