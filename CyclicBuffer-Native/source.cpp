@@ -1,33 +1,22 @@
-//#define EXTERNAL_PACKET
 #define _CRT_SECURE_NO_WARNINGS
+
+#define IS_LOCK_FREE 1
+#define IS_RECYCLABLE 1
+
 #include <stdio.h>
 #include <stdint.h>
 #include <Windows.h>
 
 #include "cyclic_buffer.h"
 
-cyclic_buffer<int32_t, true> buffer(10, 1, 3, 3);
-volatile bool is_finished(false);
+cyclic_buffer<int32_t, IS_LOCK_FREE, IS_RECYCLABLE> buffer(10);
 
 DWORD WINAPI producer(LPVOID lpParam)
 {
-#ifdef EXTERNAL_PACKET
-	int32_t *data = new int32_t();
-
-	for (int32_t cnt = 0; !is_finished; ++cnt)
+	for (int32_t cnt = 0; !buffer.is_terminated(); ++cnt)
 	{
-		*data = cnt;
-		buffer.push(&data);
+		buffer.push(cnt);
 	}
-
-	delete data;
-#else
-	for (int32_t cnt = 0; !is_finished; ++cnt)
-	{
-		*buffer.get_write_packet() = cnt;
-		buffer.push();
-	}
-#endif // EXTERNAL_PACKET
 
 	printf("producer say goodbye\n");
 	return 0;
@@ -35,39 +24,22 @@ DWORD WINAPI producer(LPVOID lpParam)
 
 DWORD WINAPI consumer(LPVOID lpParam)
 {
-#ifdef EXTERNAL_PACKET
-	int32_t *data(new int32_t());
-#else
-	int32_t *data(buffer.get_read_packet());
-#endif // EXTERNAL_PACKET
-
 	int32_t cnt, curr, last(-1);
 
+	buffer.wait_for_data();
 	auto _1 = clock();
 
 	for (cnt = 0; cnt < 100000000; ++cnt)
 	{
-		*data = -(1 + cnt);
-
-#ifdef EXTERNAL_PACKET
-		buffer.pop(&data);
+#if IS_RECYCLABLE
+		curr = buffer.pop(0);
 #else
-		buffer.pop();
-		data = buffer.get_read_packet();
-#endif // EXTERNAL_PACKET
+		curr = buffer.pop();
+#endif
 
-		curr = *data;
-
-		if (buffer.is_lock_free)
+		if (curr < last)
 		{
-			if ((curr < 0) || (curr < last))
-			{
-				printf("Error: %d : %d \n", cnt, *data);
-			}
-		}
-		else if (curr != cnt)
-		{
-			printf("Error: %d : %d \n", cnt, *data);
+			printf("Error: %d : %d \n", cnt, curr);
 		}
 
 		last = curr;
@@ -75,15 +47,10 @@ DWORD WINAPI consumer(LPVOID lpParam)
 
 	auto _2 = clock();
 
-	is_finished = true;
-	printf("%d : %d : %f\n", cnt - 1, *data, (double)(*data) / (cnt - 1));
+	buffer.terminate();
+	printf("%d : %d : %f\n", cnt - 1, curr, (double)curr / (cnt - 1));
 	printf("%d ms\n", _2 - _1);
 
-	buffer.terminate();
-
-#ifdef EXTERNAL_PACKET
-	delete data;
-#endif // EXTERNAL_PACKET
 	return 0;
 }
 
