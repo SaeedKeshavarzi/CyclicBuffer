@@ -1,9 +1,9 @@
-#ifndef _HYSTERSIS_COUNTER_LOCK_H_
-#define _HYSTERSIS_COUNTER_LOCK_H_
+#ifndef _COUNTER_LOCK_H_
+#define _COUNTER_LOCK_H_
 
 #include <Windows.h>
 
-class hystersis_counter_lock
+class counter_lock
 {
 protected:
 	const LONG max_value;
@@ -16,10 +16,10 @@ protected:
 	bool terminated;
 
 public:
-	hystersis_counter_lock(const hystersis_counter_lock&);
-	hystersis_counter_lock& operator=(const hystersis_counter_lock&);
+	counter_lock(const counter_lock&);
+	counter_lock& operator=(const counter_lock&);
 
-	hystersis_counter_lock(const LONG _max_value, const LONG _initial_value = 0) : max_value(_max_value)
+	counter_lock(const LONG _max_value, const LONG _initial_value = 0) : max_value(_max_value)
 	{
 		InitializeConditionVariable(&cv);
 		InitializeCriticalSectionAndSpinCount(&sync, INFINITE);
@@ -30,7 +30,7 @@ public:
 		terminated = false;
 	}
 
-	~hystersis_counter_lock()
+	~counter_lock()
 	{
 		DeleteCriticalSection(&sync);
 	}
@@ -126,4 +126,4 @@ public:
 	}
 };
 
-#endif // !_HYSTERSIS_COUNTER_LOCK_H_
+#endif // !_COUNTER_LOCK_H_
