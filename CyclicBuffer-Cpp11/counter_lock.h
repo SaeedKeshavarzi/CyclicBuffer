@@ -1,12 +1,12 @@
-#ifndef _HYSTERSIS_COUNTER_LOCK_H_
-#define _HYSTERSIS_COUNTER_LOCK_H_
+#ifndef _COUNTER_LOCK_H_
+#define _COUNTER_LOCK_H_
 
 #include <condition_variable>
 #include <atomic>
 
 #include "spin_lock.h"
 
-class hystersis_counter_lock
+class counter_lock
 {
 protected:
 	const int max_value;
@@ -19,10 +19,10 @@ protected:
 	bool terminated;
 
 public:
-	hystersis_counter_lock(const hystersis_counter_lock&) = delete;
-	hystersis_counter_lock& operator=(const hystersis_counter_lock&) = delete;
+	counter_lock(const counter_lock&) = delete;
+	counter_lock& operator=(const counter_lock&) = delete;
 
-	hystersis_counter_lock(const int _max_value, const int _initial_value = 0) : max_value{ _max_value }
+	counter_lock(const int _max_value, const int _initial_value = 0) : max_value{ _max_value }
 	{
 		add_lock = (_initial_value == _max_value);
 		sub_lock = (_initial_value == 0);
@@ -111,4 +111,4 @@ public:
 	}
 };
 
-#endif // !_HYSTERSIS_COUNTER_LOCK_H_
+#endif // !_COUNTER_LOCK_H_
