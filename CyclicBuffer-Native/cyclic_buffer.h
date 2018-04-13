@@ -5,7 +5,7 @@
 
 #include "spin_lock.h"
 #include "resettable_event.h"
-#include "hystersis_counter_lock.h"
+#include "counter_lock.h"
 
 template<typename _Ty, bool lock_free = false, bool recyclable = false>
 class cyclic_buffer;
@@ -270,7 +270,7 @@ private:
 	const LONG capacity;
 
 	value_type *data, *write_point, *read_point, *last_point;
-	hystersis_counter_lock size;
+	counter_lock size;
 
 public:
 	cyclic_buffer(const cyclic_buffer&);
@@ -374,7 +374,7 @@ private:
 	const LONG capacity;
 
 	value_type *data, *write_point, *read_point, *last_point;
-	hystersis_counter_lock size;
+	counter_lock size;
 
 public:
 	cyclic_buffer(const cyclic_buffer&);
