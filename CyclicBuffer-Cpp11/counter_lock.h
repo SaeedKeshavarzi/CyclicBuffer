@@ -9,9 +9,9 @@
 class counter_lock
 {
 protected:
-	const int max_value;
+	const std::size_t max_value;
 
-	std::atomic<int> value;
+	std::atomic<std::size_t> value;
 	bool add_lock, sub_lock;
 
 	std::condition_variable_any cv;
@@ -22,7 +22,7 @@ public:
 	counter_lock(const counter_lock&) = delete;
 	counter_lock& operator=(const counter_lock&) = delete;
 
-	counter_lock(const int _max_value, const int _initial_value = 0) : max_value{ _max_value }
+	counter_lock(const std::size_t _max_value, const std::size_t _initial_value = 0) : max_value{ _max_value }
 	{
 		add_lock = (_initial_value == _max_value);
 		sub_lock = (_initial_value == 0);
@@ -43,7 +43,7 @@ public:
 		return terminated;
 	}
 
-	inline int get_value() const
+	inline std::size_t get_value() const
 	{
 		return value.load();
 	}
