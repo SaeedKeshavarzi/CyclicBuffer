@@ -2,17 +2,22 @@
 #define _CYCLIC_BUFFER_H_
 
 #include <atomic>
+#include <assert.h>
 
 #include "spin_lock.h"
 #include "resettable_event.h"
 #include "counter_lock.h"
 
-template<typename _Ty, bool lock_free = false, bool recyclable = false>
+template<typename _Ty, bool _LockFree = false, bool _Recyclable = false>
 class cyclic_buffer;
 
 template<typename _Ty>
 class cyclic_buffer<_Ty, true, true>
 {
+	static_assert(!std::is_const<_Ty>::value, "Error: 'cyclic_buffer' type can not be const.");
+	static_assert(!std::is_volatile<_Ty>::value, "Error: 'cyclic_buffer' type can not be volatile.");
+	static_assert(!std::is_reference<_Ty>::value, "Error: 'cyclic_buffer' type can not be reference.");
+
 public:
 	typedef _Ty value_type;
 	typedef cyclic_buffer<_Ty, true, true> type;
@@ -20,7 +25,11 @@ public:
 	static constexpr bool is_recyclable{ true };
 
 private:
-	value_type *data, *write_point, *read_point, *last_point;
+	value_type * const data;
+	value_type * const last_point;
+	value_type * write_point;
+	value_type * read_point;
+
 	std::atomic<std::size_t> size;
 	const std::size_t capacity;
 	spin_lock sync;
@@ -29,15 +38,17 @@ private:
 	bool terminated;
 
 public:
-	cyclic_buffer(const type&) = delete;
-	type& operator=(const type&) = delete;
+	cyclic_buffer(const type &) = delete;
+	type & operator=(const type &) = delete;
 
-	cyclic_buffer(const std::size_t _capacity) : capacity{ _capacity }
+	cyclic_buffer(const std::size_t & _capacity) :
+		capacity{ _capacity },
+		data{ (value_type*)malloc((1 + _capacity) * sizeof(value_type)) },
+		last_point{ data + _capacity }
 	{
-		assert(_capacity > 0);
+        assert(_capacity > (std::size_t)1);
 
-		write_point = read_point = data = (value_type*)malloc((1 + _capacity) * sizeof(value_type));
-		last_point = data + _capacity;
+		write_point = read_point = data;
 		size = 0;
 
 		terminated = false;
@@ -65,17 +76,17 @@ public:
 		return terminated;
 	}
 
-	inline value_type* begin()
+	inline value_type * begin() const
 	{
 		return data;
 	}
 
-	inline value_type* end()
+	inline value_type * end() const
 	{
 		return data + (1 + capacity);
 	}
 
-	inline value_type push(const value_type& value)
+	inline value_type push(const value_type & value)
 	{
 		value_type result = *write_point;
 		*write_point = value;
@@ -109,7 +120,7 @@ public:
 		return result;
 	}
 
-	inline value_type pop(const value_type& value)
+	inline value_type pop(const value_type & value)
 	{
 		value_type result;
 		this->wait_for_data();
@@ -128,18 +139,18 @@ public:
 		return result;
 	}
 
-	inline const value_type operator[](std::size_t index) const
+	inline const value_type operator[](const std::size_t & _index) const
 	{
-		assert(index < size);
+        assert(_index < get_size());
 
-		return *(last_point - read_point < index ? write_point - (size - index) : read_point + index);
+        return *(last_point - read_point < _index ? write_point - (get_size() - _index) : read_point + _index);
 	}
 
-	inline value_type& operator[](std::size_t index)
+	inline value_type & operator[](const std::size_t & _index)
 	{
-		assert(index < size);
+        assert(_index < get_size());
 
-		return *(last_point - read_point < index ? write_point - (size - index) : read_point + index);
+        return *(last_point - read_point < _index ? write_point - (get_size() - _index) : read_point + _index);
 	}
 
 	inline void wait_for_data()
@@ -164,6 +175,10 @@ public:
 template<typename _Ty>
 class cyclic_buffer<_Ty, true, false>
 {
+	static_assert(!std::is_const<_Ty>::value, "Error: 'cyclic_buffer' type can not be const.");
+	static_assert(!std::is_volatile<_Ty>::value, "Error: 'cyclic_buffer' type can not be volatile.");
+	static_assert(!std::is_reference<_Ty>::value, "Error: 'cyclic_buffer' type can not be reference.");
+
 public:
 	typedef _Ty value_type;
 	typedef cyclic_buffer<_Ty, true, false> type;
@@ -171,8 +186,11 @@ public:
 	static constexpr bool is_recyclable{ false };
 
 private:
-	value_type *data, *write_point, *last_point;
+	value_type * const data;
+	value_type * const last_point;
+	value_type * write_point;
 	std::atomic<value_type*> read_point;
+
 	std::atomic<std::size_t> size;
 	const std::size_t capacity;
 
@@ -180,15 +198,17 @@ private:
 	bool terminated;
 
 public:
-	cyclic_buffer(const type&) = delete;
-	type& operator=(const type&) = delete;
+	cyclic_buffer(const type &) = delete;
+	type & operator=(const type &) = delete;
 
-	cyclic_buffer(const std::size_t _capacity) : capacity{ _capacity }
+	cyclic_buffer(const std::size_t & _capacity) :
+		capacity{ _capacity },
+		data{ (value_type*)malloc((1 + _capacity) * sizeof(value_type)) },
+		last_point{ data + _capacity }
 	{
-		assert(_capacity > 0);
+        assert(_capacity > (std::size_t)1);
 
-		write_point = read_point = data = (value_type*)malloc((1 + _capacity) * sizeof(value_type));
-		last_point = data + _capacity;
+		write_point = read_point = data;
 		size = 0;
 
 		terminated = false;
@@ -216,22 +236,22 @@ public:
 		return terminated;
 	}
 
-	inline value_type* begin()
+	inline value_type * begin() const
 	{
 		return data;
 	}
 
-	inline value_type* end()
+	inline value_type * end() const
 	{
 		return data + (1 + capacity);
 	}
 
-	inline void push(const value_type& value)
+	inline void push(const value_type & value)
 	{
 		*write_point = value;
 		(write_point == last_point ? write_point = data : ++write_point);
 
-		value_type* offset{ write_point };
+		value_type * offset{ write_point };
 		if (!read_point.compare_exchange_strong(offset, offset == last_point ? data : offset + 1))
 		{
 			size.fetch_add(1);
@@ -260,18 +280,18 @@ public:
 		return result;
 	}
 
-	inline const value_type operator[](std::size_t index) const
+	inline const value_type operator[](const std::size_t & _index) const
 	{
-		assert(index < size);
+        assert(_index < get_size());
 
-		return *(last_point - read_point < index ? write_point - (size - index) : read_point + index);
+        return *(last_point - read_point < _index ? write_point - (get_size() - _index) : read_point + _index);
 	}
 
-	inline value_type& operator[](std::size_t index)
+	inline value_type & operator[](const std::size_t & _index)
 	{
-		assert(index < size);
+        assert(_index < get_size());
 
-		return *(last_point - read_point < index ? write_point - (size - index) : read_point + index);
+        return *(last_point - read_point < _index ? write_point - (get_size() - _index) : read_point + _index);
 	}
 
 	inline void wait_for_data()
@@ -296,6 +316,10 @@ public:
 template<typename _Ty>
 class cyclic_buffer<_Ty, false, true>
 {
+	static_assert(!std::is_const<_Ty>::value, "Error: 'cyclic_buffer' type can not be const.");
+	static_assert(!std::is_volatile<_Ty>::value, "Error: 'cyclic_buffer' type can not be volatile.");
+	static_assert(!std::is_reference<_Ty>::value, "Error: 'cyclic_buffer' type can not be reference.");
+
 public:
 	typedef _Ty value_type;
 	typedef cyclic_buffer<_Ty, false, true> type;
@@ -303,20 +327,27 @@ public:
 	static constexpr bool is_recyclable{ true };
 
 private:
-	value_type *data, *write_point, *read_point, *last_point;
-	const std::size_t capacity;
+	value_type * const data;
+	value_type * const last_point;
+	value_type * write_point;
+	value_type * read_point;
+
 	counter_lock size;
+	const std::size_t capacity;
 
 public:
-	cyclic_buffer(const type&) = delete;
-	type& operator=(const type&) = delete;
+	cyclic_buffer(const type &) = delete;
+	type & operator=(const type &) = delete;
 
-	cyclic_buffer(const std::size_t _capacity) : capacity{ _capacity }, size{ _capacity , 0 }
+	cyclic_buffer(const std::size_t & _capacity) :
+		capacity{ _capacity },
+		size{ _capacity , 0 },
+		data{ (value_type*)malloc(_capacity * sizeof(value_type)) },
+		last_point{ data + _capacity - 1 }
 	{
-		assert(_capacity > 0);
+        assert(_capacity > (std::size_t)1);
 
-		write_point = read_point = data = (value_type*)malloc(_capacity * sizeof(value_type));
-		last_point = data + _capacity - 1;
+		write_point = read_point = data;
 	}
 
 	~cyclic_buffer()
@@ -339,17 +370,17 @@ public:
 		return size.is_terminated();
 	}
 
-	inline value_type* begin()
+	inline value_type * begin() const
 	{
 		return data;
 	}
 
-	inline value_type* end()
+	inline value_type * end() const
 	{
 		return data + capacity;
 	}
 
-	inline value_type push(const value_type& value)
+	inline value_type push(const value_type & value)
 	{
 		this->wait_for_space();
 
@@ -362,7 +393,7 @@ public:
 		return result;
 	}
 
-	inline value_type pop(const value_type& value)
+	inline value_type pop(const value_type & value)
 	{
 		this->wait_for_data();
 
@@ -375,18 +406,18 @@ public:
 		return result;
 	}
 
-	inline const value_type operator[](std::size_t index) const
+	inline const value_type operator[](const std::size_t & _index) const
 	{
-		assert(index < size);
+        assert(_index < get_size());
 
-		return *(last_point - read_point < index ? write_point - (size - index) : read_point + index);
+        return *(last_point - read_point < _index ? write_point - (get_size() - _index) : read_point + _index);
 	}
 
-	inline value_type& operator[](std::size_t index)
+	inline value_type & operator[](const std::size_t & _index)
 	{
-		assert(index < size);
+        assert(_index < get_size());
 
-		return *(last_point - read_point < index ? write_point - (size - index) : read_point + index);
+        return *(last_point - read_point < _index ? write_point - (get_size() - _index) : read_point + _index);
 	}
 
 	inline void wait_for_space()
@@ -419,6 +450,10 @@ public:
 template<typename _Ty>
 class cyclic_buffer<_Ty, false, false>
 {
+	static_assert(!std::is_const<_Ty>::value, "Error: 'cyclic_buffer' type can not be const.");
+	static_assert(!std::is_volatile<_Ty>::value, "Error: 'cyclic_buffer' type can not be volatile.");
+	static_assert(!std::is_reference<_Ty>::value, "Error: 'cyclic_buffer' type can not be reference.");
+
 public:
 	typedef _Ty value_type;
 	typedef cyclic_buffer<_Ty, false, false> type;
@@ -426,20 +461,27 @@ public:
 	static constexpr bool is_recyclable{ false };
 
 private:
-	value_type *data, *write_point, *read_point, *last_point;
-	const std::size_t capacity;
+	value_type * const data;
+	value_type * const last_point;
+	value_type * write_point;
+	value_type * read_point;
+
 	counter_lock size;
+	const std::size_t capacity;
 
 public:
-	cyclic_buffer(const type&) = delete;
-	type& operator=(const type&) = delete;
+	cyclic_buffer(const type &) = delete;
+	type & operator=(const type &) = delete;
 
-	cyclic_buffer(const std::size_t _capacity) : capacity{ _capacity }, size{ _capacity , 0 }
+	cyclic_buffer(const std::size_t & _capacity) :
+		capacity{ _capacity },
+		size{ _capacity , 0 },
+		data{ (value_type*)malloc(_capacity * sizeof(value_type)) },
+		last_point{ data + _capacity - 1 }
 	{
-		assert(_capacity > 0);
+        assert(_capacity > (std::size_t)1);
 
-		write_point = read_point = data = (value_type*)malloc(_capacity * sizeof(value_type));
-		last_point = data + _capacity - 1;
+		write_point = read_point = data;
 	}
 
 	~cyclic_buffer()
@@ -462,17 +504,17 @@ public:
 		return size.is_terminated();
 	}
 
-	inline value_type* begin()
+	inline value_type * begin() const
 	{
 		return data;
 	}
 
-	inline value_type* end()
+	inline value_type * end() const
 	{
 		return data + capacity;
 	}
 
-	inline void push(const value_type& value)
+	inline void push(const value_type & value)
 	{
 		this->wait_for_space();
 
@@ -494,18 +536,18 @@ public:
 		return result;
 	}
 
-	inline const value_type operator[](std::size_t index) const
+	inline const value_type operator[](const std::size_t & _index) const
 	{
-		assert(index < size);
+        assert(_index < get_size());
 
-		return *(last_point - read_point < index ? write_point - (size - index) : read_point + index);
+        return *(last_point - read_point < _index ? write_point - (get_size() - _index) : read_point + _index);
 	}
 
-	inline value_type& operator[](std::size_t index)
+	inline value_type & operator[](const std::size_t & _index)
 	{
-		assert(index < size);
+        assert(_index < get_size());
 
-		return *(last_point - read_point < index ? write_point - (size - index) : read_point + index);
+        return *(last_point - read_point < _index ? write_point - (get_size() - _index) : read_point + _index);
 	}
 
 	inline void wait_for_space()
@@ -535,123 +577,194 @@ public:
 	}
 };
 
-template<typename _Ty, std::size_t _Capacity>
+template<typename _Ty>
 class cyclic_buffer_unsafe
 {
 	static_assert(!std::is_const<_Ty>::value, "Error: 'cyclic_buffer_unsafe' type can not be const.");
 	static_assert(!std::is_volatile<_Ty>::value, "Error: 'cyclic_buffer_unsafe' type can not be volatile.");
 	static_assert(!std::is_reference<_Ty>::value, "Error: 'cyclic_buffer_unsafe' type can not be reference.");
-	static_assert((_Capacity) > (std::size_t)1, "Error: 'cyclic_buffer_unsafe' capacity must be greater than 1.");
 
 public:
 	typedef _Ty value_type;
-	typedef cyclic_buffer_unsafe<_Ty, _Capacity> type;
-	static constexpr std::size_t capacity = (_Capacity);
+	typedef cyclic_buffer_unsafe<_Ty> type;
 
 protected:
-	value_type *const data_, *const last_point_, *read_point_, *write_point_;
-	std::size_t size_;
+	value_type * const data;
+	value_type * const last_point;
+	value_type * front_point;
+	value_type * back_point;
+
+	std::size_t size;
+	const std::size_t capacity;
 
 public:
 	cyclic_buffer_unsafe(type const &) = delete;
 	type & operator=(type const &) = delete;
 
-	cyclic_buffer_unsafe() :
-		data_((value_type*)malloc(capacity * sizeof(value_type))),
-		last_point_(data_ + capacity - 1)
+	cyclic_buffer_unsafe(const std::size_t _capacity) :
+		capacity{ _capacity },
+		data((value_type*)malloc(_capacity * sizeof(value_type))),
+		last_point(data + _capacity - 1)
 	{
-		write_point_ = read_point_ = data_;
-		size_ = 0;
+        assert(_capacity > (std::size_t)1);
+
+		front_point = back_point = data;
+		size = 0;
 	}
 
 	~cyclic_buffer_unsafe()
 	{
-		free(data_);
+		free(data);
 	}
 
 	inline value_type * begin() const
 	{
-		return data_;
+		return data;
 	}
 
 	inline value_type * end() const
 	{
-		return data_ + capacity;
+		return data + capacity;
 	}
 
-	inline value_type push(value_type const & _value)
+	inline value_type push_front(value_type const & _value)
 	{
-		assert(size_ < capacity);
+		assert(size < capacity);
 
-		value_type result = *write_point_;
-		*write_point_ = _value;
+		(front_point == data ? front_point = last_point : --front_point);
+		++size;
 
-		(write_point_ == last_point_ ? write_point_ = data_ : ++write_point_);
-		++size_;
+		value_type result = *front_point;
+		*front_point = _value;
 
 		return result;
 	}
 
-	inline value_type force_push(value_type const & _value)
+	inline value_type force_push_front(value_type const & _value)
 	{
-		value_type result = *write_point_;
-		*write_point_ = _value;
-
-		(write_point_ == last_point_ ? write_point_ = data_ : ++write_point_);
-		if (size_ == capacity)
+		(front_point == data ? front_point = last_point : --front_point);
+		if (size == capacity)
 		{
-			read_point_ = write_point_;
+			back_point = front_point;
 		}
 		else
 		{
-			++size_;
+			++size;
+		}
+
+		value_type result = *front_point;
+		*front_point = _value;
+
+		return result;
+	}
+
+	inline value_type push_back(value_type const & _value)
+	{
+		assert(size < capacity);
+
+		value_type result = *back_point;
+		*back_point = _value;
+
+		(back_point == last_point ? back_point = data : ++back_point);
+		++size;
+
+		return result;
+	}
+
+	inline value_type force_push_back(value_type const & _value)
+	{
+		value_type result = *back_point;
+		*back_point = _value;
+
+		(back_point == last_point ? back_point = data : ++back_point);
+		if (size == capacity)
+		{
+			front_point = back_point;
+		}
+		else
+		{
+			++size;
 		}
 
 		return result;
 	}
 
-	inline value_type pop()
+	inline value_type pop_front()
 	{
-		assert(size_ > (std::size_t)0);
+		assert(size > (std::size_t)0);
 
-		value_type result = *read_point_;
+		value_type result = *front_point;
 
-		(read_point_ == last_point_ ? read_point_ = data_ : ++read_point_);
+		(front_point == last_point ? front_point = data : ++front_point);
 		--size;
 
 		return result;
 	}
 
-	inline value_type pop(value_type const & _value)
+	inline value_type pop_front(value_type const & _value)
 	{
-		assert(size_ > (std::size_t)0);
+		assert(size > (std::size_t)0);
 
-		value_type result = *read_point_;
-		*read_point_ = _value;
+		value_type result = *front_point;
+		*front_point = _value;
 
-		(read_point_ == last_point_ ? read_point_ = data_ : ++read_point_);
+		(front_point == last_point ? front_point = data : ++front_point);
 		--size;
 
 		return result;
 	}
 
-	inline value_type operator[](std::size_t const & _index) const
+	inline value_type pop_back()
 	{
-		assert(_index < size_);
+		assert(size > (std::size_t)0);
 
-		return *(last_point_ - read_point_ < _index ? write_point_ - (size_ - _index) : read_point_ + _index);
+		(back_point == data ? back_point = last_point : --back_point);
+		--size;
+
+		return (*back_point);
 	}
 
-	inline value_type & operator[](std::size_t const & _index)
+	inline value_type pop_back(value_type const & _value)
 	{
-		assert(_index < size_);
+		assert(size > (std::size_t)0);
 
-		return *(last_point_ - read_point_ < _index ? write_point_ - (size_ - _index) : read_point_ + _index);
+		(back_point == data ? back_point = last_point : --back_point);
+		--size;
+
+		value_type result = *back_point;
+		*back_point = _value;
+
+		return result;
 	}
 
-	inline std::size_t size() const
+	inline value_type operator[](const std::size_t & _index) const
 	{
-		return size_;
+		assert(_index < size);
+
+        if ((last_point < front_point) || ((std::size_t)(last_point - front_point) < _index))
+            return *(back_point - (size - _index));
+
+        return *(front_point + _index);
+	}
+
+	inline value_type & operator[](const std::size_t & _index)
+	{
+		assert(_index < size);
+
+        if ((last_point < front_point) || ((std::size_t)(last_point - front_point) < _index))
+            return *(back_point - (size - _index));
+
+        return *(front_point + _index);
+	}
+
+	inline std::size_t get_capacity() const
+	{
+		return capacity;
+	}
+
+	inline std::size_t get_size() const
+	{
+		return size;
 	}
 };
 

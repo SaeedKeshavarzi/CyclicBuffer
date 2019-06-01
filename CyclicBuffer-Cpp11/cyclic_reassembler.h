@@ -7,47 +7,51 @@
 
 #include "cyclic_number.h"
 
-template<typename _Ty, std::size_t _Mod, std::size_t _Size = (_Mod)>
+template<typename _Ty>
 class cyclic_reassembler
 {
 	static_assert(!std::is_const<_Ty>::value, "Error: 'cyclic_reassembler' type can not be const.");
 	static_assert(!std::is_volatile<_Ty>::value, "Error: 'cyclic_reassembler' type can not be volatile.");
 	static_assert(!std::is_reference<_Ty>::value, "Error: 'cyclic_reassembler' type can not be reference.");
-	static_assert((_Mod) > (std::size_t)1, "Error: 'cyclic_reassembler' modulus must be greater than 1.");
-	static_assert((_Size) > (std::size_t)1, "Error: 'cyclic_reassembler' size must be greater than 1.");
-	static_assert((_Mod) >= (_Size), "Error: 'cyclic_reassembler' modulus must be greater than or equla to its size.");
 
 public:
 	typedef _Ty value_type;
-	typedef cyclic_reassembler<_Ty, _Mod, _Size> type;
-	static constexpr std::size_t modulus = (_Mod);
-	static constexpr std::size_t size = (_Size);
+	typedef cyclic_reassembler<_Ty> type;
 
 protected:
-	typedef cyclic_number<std::size_t, size> local_index_t;
-	typedef cyclic_number<std::size_t, modulus> global_index_t;
+	typedef cyclic_number<std::size_t> index_t;
 
-	local_index_t read_point_{ 0 };
-	global_index_t offset_{ 0 };
+	const std::size_t modulus_;
+	const std::size_t size_;
 
-	value_type *const data_;
-	bool *const exist_;
+	index_t read_point_; // base on size_
+	index_t offset_; // base on modulus_
+
+	value_type * const data_;
+	bool * const exist_;
 
 public:
 	cyclic_reassembler(const type &) = delete;
 	type & operator=(const type &) = delete;
 
-	cyclic_reassembler() :
-		data_((value_type*)malloc(size * sizeof(value_type))),
-		exist_((bool*)malloc(size * sizeof(bool)))
+	cyclic_reassembler(const std::size_t & _modulus, const std::size_t & _size) :
+		modulus_{ _modulus },
+		size_{ _size },
+		read_point_{ 0, _size },
+		offset_{ 0, _modulus },
+		data_{ (value_type*)malloc(_size * sizeof(value_type)) },
+		exist_{ (bool*)malloc(_size * sizeof(bool)) }
 	{
-		memset(exist_, 0, size * sizeof(bool));
+		assert(_modulus > (std::size_t)1 /* Error: 'cyclic_reassembler' modulus must be greater than 1. */);
+		assert(_size > (std::size_t)1 /* Error: 'cyclic_reassembler' size must be greater than 1. */);
+		assert(_modulus >= _size /* Error: 'cyclic_reassembler' modulus must be greater than or equla to its size. */);
+
+		memset(exist_, 0, _size * sizeof(bool));
 	}
 
-	explicit cyclic_reassembler(std::size_t const & _offset) : cyclic_reassembler()
-	{
-		offset(_offset);
-	}
+	cyclic_reassembler(const std::size_t & _modulus) :
+		cyclic_reassembler{ _modulus, _modulus }
+	{  }
 
 	virtual ~cyclic_reassembler()
 	{
@@ -62,7 +66,17 @@ public:
 
 	inline value_type * end() const
 	{
-		return data_ + size;
+		return data_ + size_;
+	}
+
+	inline std::size_t modulus() const
+	{
+		return modulus_;
+	}
+
+	inline std::size_t size() const
+	{
+		return size_;
 	}
 
 	inline std::size_t offset() const
@@ -70,9 +84,9 @@ public:
 		return offset_.value();
 	}
 
-	inline void offset(std::size_t const & _offset)
+	inline void offset(const std::size_t & _offset)
 	{
-		assert(global_index_t::validate(_offset));
+		assert(index_t::validate(_offset, modulus_));
 
 		for (/* nothing */; offset_.value() != _offset; ++offset_)
 		{
@@ -83,9 +97,9 @@ public:
 
 	inline bool valid_index(std::size_t const & _index) const
 	{
-		assert(global_index_t::validate(_index));
+		assert(index_t::validate(_index, modulus_));
 
-		return (offset_.clockwise_distance((global_index_t)_index) < size);
+        return (offset_.clockwise_distance(index_t(_index, modulus_)) < size_);
 	}
 
 	inline bool exist(std::size_t const & _index) const
@@ -100,13 +114,13 @@ public:
 
 	inline void clear() const
 	{
-		memset(exist_, 0, size * sizeof(bool));
+		memset(exist_, 0, size_ * sizeof(bool));
 	}
 
 	inline std::size_t ready_count() const
 	{
 		std::size_t result{ 0 };
-		local_index_t it{ read_point_ };
+		index_t it{ read_point_ };
 		while (exist_[it.value()])
 		{
 			++result;
@@ -121,7 +135,7 @@ public:
 
 	inline value_type push(value_type const & _value, std::size_t const & _index)
 	{
-		local_index_t local_index = local_index_(_index);
+		index_t local_index = local_index_(_index);
 
 		value_type result = data_[local_index.value()];
 		data_[local_index.value()] = _value;
@@ -134,7 +148,7 @@ public:
 	{
 		if (!valid_index(_index))
 		{
-			std::size_t && diff = offset_.clockwise_distance((global_index_t)_index) - (size - (std::size_t)1);
+            std::size_t && diff = offset_.clockwise_distance(index_t(_index, modulus_)) - (size_ - (std::size_t)1);
 			offset((offset_ + diff).value());
 		}
 
@@ -169,12 +183,12 @@ public:
 	}
 
 protected:
-	inline local_index_t local_index_(std::size_t const & _index) const
+	inline index_t local_index_(const std::size_t & _index) const
 	{
-		assert(global_index_t::validate(_index));
+		assert(index_t::validate(_index, modulus_));
 
-		std::size_t && diff = offset_.clockwise_distance((global_index_t)_index);
-		assert(diff < size);
+		std::size_t && diff = offset_.clockwise_distance(index_t{ _index, modulus_ });
+		assert(diff < size_);
 
 		return (read_point_ + diff);
 	}
