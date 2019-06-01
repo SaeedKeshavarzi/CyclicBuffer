@@ -1,0 +1,6 @@
+/debug/
+/release/
+/x64/
+/.vs/
+*.VC.db
+*.VC.opendb
