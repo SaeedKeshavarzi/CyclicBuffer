@@ -1,6 +1,7 @@
 #ifndef _CYCLIC_REASSEMBLER_H_
 #define _CYCLIC_REASSEMBLER_H_
 
+#include <condition_variable>
 #include <type_traits>
 #include <stddef.h>
 #include <assert.h>
@@ -30,6 +31,9 @@ protected:
 	value_type * const data_;
 	bool * const exist_;
 
+	bool closing{ false };
+	std::condition_variable_any cv;
+
 public:
 	cyclic_reassembler(const type &) = delete;
 	type & operator=(const type &) = delete;
@@ -57,6 +61,9 @@ public:
 	{
 		free(data_);
 		free(exist_);
+
+		closing = true;
+		cv.notify_all();
 	}
 
 	inline value_type * begin() const
@@ -93,13 +100,15 @@ public:
 			exist_[read_point_.value()] = false;
 			++read_point_;
 		}
+
+		cv.notify_all();
 	}
 
 	inline bool valid_index(std::size_t const & _index) const
 	{
 		assert(index_t::validate(_index, modulus_));
 
-        return (offset_.clockwise_distance(index_t(_index, modulus_)) < size_);
+		return (offset_.clockwise_distance(index_t(_index, modulus_)) < size_);
 	}
 
 	inline bool exist(std::size_t const & _index) const
@@ -144,11 +153,31 @@ public:
 		return result;
 	}
 
+	template<class Lock>
+	inline value_type push(value_type const & _value, std::size_t const & _index, Lock & lock)
+	{
+		assert(index_t::validate(_index, modulus_));
+
+		index_t wrapped_index{ _index, modulus_ };
+		std::size_t diff{ 0 };
+
+		while (((diff = offset_.clockwise_distance(wrapped_index)) >= size_) && !closing) {
+			cv.wait(lock);
+		}
+
+		std::size_t local_index = (read_point_ + diff).value();
+		value_type result = data_[local_index];
+		data_[local_index] = _value;
+		exist_[local_index] = true;
+
+		return result;
+	}
+
 	inline value_type force_push(value_type const & _value, std::size_t const & _index)
 	{
 		if (!valid_index(_index))
 		{
-            std::size_t && diff = offset_.clockwise_distance(index_t(_index, modulus_)) - (size_ - (std::size_t)1);
+			std::size_t && diff = offset_.clockwise_distance(index_t(_index, modulus_)) - (size_ - (std::size_t)1);
 			offset((offset_ + diff).value());
 		}
 
@@ -165,6 +194,8 @@ public:
 		++read_point_;
 		++offset_;
 
+		cv.notify_all();
+
 		return result;
 	}
 
@@ -178,6 +209,8 @@ public:
 
 		++read_point_;
 		++offset_;
+
+		cv.notify_all();
 
 		return result;
 	}

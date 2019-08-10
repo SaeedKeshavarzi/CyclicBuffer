@@ -46,7 +46,7 @@ public:
 		data{ (value_type*)malloc((1 + _capacity) * sizeof(value_type)) },
 		last_point{ data + _capacity }
 	{
-        assert(_capacity > (std::size_t)1);
+		assert(_capacity > (std::size_t)1);
 
 		write_point = read_point = data;
 		size = 0;
@@ -141,16 +141,16 @@ public:
 
 	inline const value_type operator[](const std::size_t & _index) const
 	{
-        assert(_index < get_size());
+		assert(_index < get_size());
 
-        return *(last_point - read_point < _index ? write_point - (get_size() - _index) : read_point + _index);
+		return *(last_point - read_point < _index ? write_point - (get_size() - _index) : read_point + _index);
 	}
 
 	inline value_type & operator[](const std::size_t & _index)
 	{
-        assert(_index < get_size());
+		assert(_index < get_size());
 
-        return *(last_point - read_point < _index ? write_point - (get_size() - _index) : read_point + _index);
+		return *(last_point - read_point < _index ? write_point - (get_size() - _index) : read_point + _index);
 	}
 
 	inline void wait_for_data()
@@ -159,6 +159,28 @@ public:
 		{
 			read_enable.wait();
 		}
+	}
+
+	template<class _Rep, class _Period>
+	inline bool wait_for_data_for(const std::chrono::duration<_Rep, _Period>& rel_time)
+	{
+		if (!read_enable.is_set() && !terminated)
+		{
+			return read_enable.wait_for(rel_time);
+		}
+
+		return true;
+	}
+
+	template<class _Clock, class _Duration>
+	inline bool wait_for_data_until(const std::chrono::time_point<_Clock, _Duration>& timeout_time)
+	{
+		if (!read_enable.is_set() && !terminated)
+		{
+			return read_enable.wait_until(timeout_time);
+		}
+
+		return true;
 	}
 
 	inline std::size_t get_capacity() const
@@ -206,7 +228,7 @@ public:
 		data{ (value_type*)malloc((1 + _capacity) * sizeof(value_type)) },
 		last_point{ data + _capacity }
 	{
-        assert(_capacity > (std::size_t)1);
+		assert(_capacity > (std::size_t)1);
 
 		write_point = read_point = data;
 		size = 0;
@@ -282,16 +304,16 @@ public:
 
 	inline const value_type operator[](const std::size_t & _index) const
 	{
-        assert(_index < get_size());
+		assert(_index < get_size());
 
-        return *(last_point - read_point < _index ? write_point - (get_size() - _index) : read_point + _index);
+		return *(last_point - read_point < _index ? write_point - (get_size() - _index) : read_point + _index);
 	}
 
 	inline value_type & operator[](const std::size_t & _index)
 	{
-        assert(_index < get_size());
+		assert(_index < get_size());
 
-        return *(last_point - read_point < _index ? write_point - (get_size() - _index) : read_point + _index);
+		return *(last_point - read_point < _index ? write_point - (get_size() - _index) : read_point + _index);
 	}
 
 	inline void wait_for_data()
@@ -300,6 +322,28 @@ public:
 		{
 			read_enable.wait();
 		}
+	}
+
+	template<class _Rep, class _Period>
+	inline bool wait_for_data_for(const std::chrono::duration<_Rep, _Period>& rel_time)
+	{
+		if (!read_enable.is_set() && !terminated)
+		{
+			return read_enable.wait_for(rel_time);
+		}
+
+		return true;
+	}
+
+	template<class _Clock, class _Duration>
+	inline bool wait_for_data_until(const std::chrono::time_point<_Clock, _Duration>& timeout_time)
+	{
+		if (!read_enable.is_set() && !terminated)
+		{
+			return read_enable.wait_until(timeout_time);
+		}
+
+		return true;
 	}
 
 	inline std::size_t get_capacity() const
@@ -345,7 +389,7 @@ public:
 		data{ (value_type*)malloc(_capacity * sizeof(value_type)) },
 		last_point{ data + _capacity - 1 }
 	{
-        assert(_capacity > (std::size_t)1);
+		assert(_capacity > (std::size_t)1);
 
 		write_point = read_point = data;
 	}
@@ -408,16 +452,16 @@ public:
 
 	inline const value_type operator[](const std::size_t & _index) const
 	{
-        assert(_index < get_size());
+		assert(_index < get_size());
 
-        return *(last_point - read_point < _index ? write_point - (get_size() - _index) : read_point + _index);
+		return *(last_point - read_point < _index ? write_point - (get_size() - _index) : read_point + _index);
 	}
 
 	inline value_type & operator[](const std::size_t & _index)
 	{
-        assert(_index < get_size());
+		assert(_index < get_size());
 
-        return *(last_point - read_point < _index ? write_point - (get_size() - _index) : read_point + _index);
+		return *(last_point - read_point < _index ? write_point - (get_size() - _index) : read_point + _index);
 	}
 
 	inline void wait_for_space()
@@ -428,12 +472,56 @@ public:
 		}
 	}
 
+	template<class _Rep, class _Period>
+	inline bool wait_for_space_for(const std::chrono::duration<_Rep, _Period>& rel_time)
+	{
+		if (size.get_value() == capacity)
+		{
+			return size.wait_for_add_for(rel_time);
+		}
+
+		return true;
+	}
+
+	template<class _Clock, class _Duration>
+	inline bool wait_for_space_until(const std::chrono::time_point<_Clock, _Duration>& timeout_time)
+	{
+		if (size.get_value() == capacity)
+		{
+			return size.wait_for_add_until(timeout_time);
+		}
+
+		return true;
+	}
+
 	inline void wait_for_data()
 	{
 		if (size.get_value() == 0)
 		{
 			size.wait_for_sub();
 		}
+	}
+
+	template<class _Rep, class _Period>
+	inline bool wait_for_data(const std::chrono::duration<_Rep, _Period>& rel_time)
+	{
+		if (size.get_value() == 0)
+		{
+			return size.wait_for_sub_for(rel_time);
+		}
+
+		return true;
+	}
+
+	template<class _Clock, class _Duration>
+	inline bool wait_for_data(const std::chrono::time_point<_Clock, _Duration>& timeout_time)
+	{
+		if (size.get_value() == 0)
+		{
+			return size.wait_for_sub_until(timeout_time);
+		}
+
+		return true;
 	}
 
 	inline std::size_t get_capacity() const
@@ -479,7 +567,7 @@ public:
 		data{ (value_type*)malloc(_capacity * sizeof(value_type)) },
 		last_point{ data + _capacity - 1 }
 	{
-        assert(_capacity > (std::size_t)1);
+		assert(_capacity > (std::size_t)1);
 
 		write_point = read_point = data;
 	}
@@ -538,16 +626,16 @@ public:
 
 	inline const value_type operator[](const std::size_t & _index) const
 	{
-        assert(_index < get_size());
+		assert(_index < get_size());
 
-        return *(last_point - read_point < _index ? write_point - (get_size() - _index) : read_point + _index);
+		return *(last_point - read_point < _index ? write_point - (get_size() - _index) : read_point + _index);
 	}
 
 	inline value_type & operator[](const std::size_t & _index)
 	{
-        assert(_index < get_size());
+		assert(_index < get_size());
 
-        return *(last_point - read_point < _index ? write_point - (get_size() - _index) : read_point + _index);
+		return *(last_point - read_point < _index ? write_point - (get_size() - _index) : read_point + _index);
 	}
 
 	inline void wait_for_space()
@@ -558,12 +646,56 @@ public:
 		}
 	}
 
+	template<class _Rep, class _Period>
+	inline bool wait_for_space_for(const std::chrono::duration<_Rep, _Period>& rel_time)
+	{
+		if (size.get_value() == capacity)
+		{
+			return size.wait_for_add_for(rel_time);
+		}
+
+		return true;
+	}
+
+	template<class _Clock, class _Duration>
+	inline bool wait_for_space_until(const std::chrono::time_point<_Clock, _Duration>& timeout_time)
+	{
+		if (size.get_value() == capacity)
+		{
+			return size.wait_for_add_until(timeout_time);
+		}
+
+		return true;
+	}
+
 	inline void wait_for_data()
 	{
 		if (size.get_value() == 0)
 		{
 			size.wait_for_sub();
 		}
+	}
+
+	template<class _Rep, class _Period>
+	inline bool wait_for_data(const std::chrono::duration<_Rep, _Period>& rel_time)
+	{
+		if (size.get_value() == 0)
+		{
+			return size.wait_for_sub_for(rel_time);
+		}
+
+		return true;
+	}
+
+	template<class _Clock, class _Duration>
+	inline bool wait_for_data(const std::chrono::time_point<_Clock, _Duration>& timeout_time)
+	{
+		if (size.get_value() == 0)
+		{
+			return size.wait_for_sub_until(timeout_time);
+		}
+
+		return true;
 	}
 
 	inline std::size_t get_capacity() const
@@ -606,7 +738,7 @@ public:
 		data((value_type*)malloc(_capacity * sizeof(value_type))),
 		last_point(data + _capacity - 1)
 	{
-        assert(_capacity > (std::size_t)1);
+		assert(_capacity > (std::size_t)1);
 
 		front_point = back_point = data;
 		size = 0;
@@ -741,20 +873,20 @@ public:
 	{
 		assert(_index < size);
 
-        if ((last_point < front_point) || ((std::size_t)(last_point - front_point) < _index))
-            return *(back_point - (size - _index));
+		if ((last_point < front_point) || ((std::size_t)(last_point - front_point) < _index))
+			return *(back_point - (size - _index));
 
-        return *(front_point + _index);
+		return *(front_point + _index);
 	}
 
 	inline value_type & operator[](const std::size_t & _index)
 	{
 		assert(_index < size);
 
-        if ((last_point < front_point) || ((std::size_t)(last_point - front_point) < _index))
-            return *(back_point - (size - _index));
+		if ((last_point < front_point) || ((std::size_t)(last_point - front_point) < _index))
+			return *(back_point - (size - _index));
 
-        return *(front_point + _index);
+		return *(front_point + _index);
 	}
 
 	inline std::size_t get_capacity() const

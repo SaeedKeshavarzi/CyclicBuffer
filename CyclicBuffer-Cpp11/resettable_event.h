@@ -38,13 +38,6 @@ public:
 	}
 
 	virtual inline void wait() = 0;
-
-	inline bool wait_for(const std::chrono::milliseconds& rel_time)
-	{
-		return this->wait_until(std::chrono::steady_clock::now() + rel_time);
-	}
-
-	virtual inline bool wait_until(const std::chrono::time_point<std::chrono::steady_clock>& /*timeout_time*/) = 0;
 };
 
 class manual_reset_event : public resettable_event
@@ -65,7 +58,24 @@ public:
 		}
 	}
 
-	inline bool wait_until(const std::chrono::time_point<std::chrono::steady_clock>& timeout_time)
+	template<class _Rep, class _Period>
+	inline bool wait_for(const std::chrono::duration<_Rep, _Period>& rel_time)
+	{
+		std::unique_lock<spin_lock> lock(sync);
+
+		while (!state.load())
+		{
+			if (cv.wait_for(lock, rel_time) == std::cv_status::timeout)
+			{
+				return state.load();
+			}
+		}
+
+		return true;
+	}
+
+	template<class _Clock, class _Duration>
+	inline bool wait_until(const std::chrono::time_point<_Clock, _Duration>& timeout_time)
 	{
 		std::unique_lock<spin_lock> lock(sync);
 
@@ -99,7 +109,24 @@ public:
 		}
 	}
 
-	inline bool wait_until(const std::chrono::time_point<std::chrono::steady_clock>& timeout_time)
+	template<class _Rep, class _Period>
+	inline bool wait_for(const std::chrono::duration<_Rep, _Period>& rel_time)
+	{
+		std::unique_lock<spin_lock> lock(sync);
+
+		while (!state.exchange(false))
+		{
+			if (cv.wait_for(lock, rel_time) == std::cv_status::timeout)
+			{
+				return state.exchange(false);
+			}
+		}
+
+		return true;
+	}
+
+	template<class _Clock, class _Duration>
+	inline bool wait_until(const std::chrono::time_point<_Clock, _Duration>& timeout_time)
 	{
 		std::unique_lock<spin_lock> lock(sync);
 

@@ -13,6 +13,11 @@ public:
 	spin_lock(const spin_lock&) = delete;
 	spin_lock& operator=(const spin_lock&) = delete;
 
+	inline bool try_lock()
+	{
+		return !(flag.test_and_set(std::memory_order_acquire));
+	}
+
 	inline void lock()
 	{
 		while (flag.test_and_set(std::memory_order_acquire));

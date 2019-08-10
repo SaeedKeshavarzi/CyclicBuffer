@@ -100,6 +100,32 @@ public:
 		}
 	}
 
+	template<class _Rep, class _Period>
+	inline bool wait_for_add_for(const std::chrono::duration<_Rep, _Period>& rel_time)
+	{
+		std::unique_lock<spin_lock> lock(sync);
+
+		while (add_lock && !terminated)
+		{
+			return (cv.wait_for(lock, rel_time) != std::cv_status::timeout);
+		}
+
+		return true;
+	}
+
+	template<class _Clock, class _Duration>
+	inline bool wait_for_add_until(const std::chrono::time_point<_Clock, _Duration>& timeout_time)
+	{
+		std::unique_lock<spin_lock> lock(sync);
+
+		while (add_lock && !terminated)
+		{
+			return (cv.wait_until(lock, timeout_time) != std::cv_status::timeout);
+		}
+
+		return true;
+	}
+
 	inline void wait_for_sub()
 	{
 		std::unique_lock<spin_lock> lock(sync);
@@ -108,6 +134,32 @@ public:
 		{
 			cv.wait(lock);
 		}
+	}
+
+	template<class _Rep, class _Period>
+	inline bool wait_for_sub_for(const std::chrono::duration<_Rep, _Period>& rel_time)
+	{
+		std::unique_lock<spin_lock> lock(sync);
+
+		while (sub_lock && !terminated)
+		{
+			return (cv.wait_for(lock, rel_time) != std::cv_status::timeout);
+		}
+
+		return true;
+	}
+
+	template<class _Clock, class _Duration>
+	inline bool wait_for_sub_until(const std::chrono::time_point<_Clock, _Duration>& timeout_time)
+	{
+		std::unique_lock<spin_lock> lock(sync);
+
+		while (sub_lock && !terminated)
+		{
+			return (cv.wait_until(lock, timeout_time) != std::cv_status::timeout);
+		}
+
+		return true;
 	}
 };
 
