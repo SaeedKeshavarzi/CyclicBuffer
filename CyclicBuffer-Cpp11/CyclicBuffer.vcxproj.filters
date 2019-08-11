@@ -41,9 +41,6 @@
     <ClInclude Include="shared_spin_lock.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="sync_thread.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="cyclic_reassembler.h">
       <Filter>Header Files</Filter>
     </ClInclude>

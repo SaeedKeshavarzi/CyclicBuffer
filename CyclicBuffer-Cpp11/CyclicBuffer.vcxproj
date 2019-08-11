@@ -121,7 +121,6 @@
     <ClInclude Include="resettable_event.h" />
     <ClInclude Include="shared_spin_lock.h" />
     <ClInclude Include="spin_lock.h" />
-    <ClInclude Include="sync_thread.h" />
     <ClInclude Include="thread_naming.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
