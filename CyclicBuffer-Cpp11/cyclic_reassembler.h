@@ -114,9 +114,7 @@ public:
 	inline bool exist(std::size_t const & _index) const
 	{
 		if (!valid_index(_index))
-		{
 			return false;
-		}
 
 		return exist_[local_index_(_index).value()];
 	}
@@ -134,9 +132,7 @@ public:
 		{
 			++result;
 			if (++it == read_point_)
-			{
 				break;
-			}
 		}
 
 		return result;
@@ -161,9 +157,8 @@ public:
 		index_t wrapped_index{ _index, modulus_ };
 		std::size_t diff{ 0 };
 
-		while (((diff = offset_.clockwise_distance(wrapped_index)) >= size_) && !closing) {
+		while (((diff = offset_.clockwise_distance(wrapped_index)) >= size_) && !closing)
 			cv.wait(lock);
-		}
 
 		std::size_t local_index = (read_point_ + diff).value();
 		value_type result = data_[local_index];

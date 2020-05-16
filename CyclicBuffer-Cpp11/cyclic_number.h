@@ -1,7 +1,6 @@
 #ifndef _CYCLIC_NUMBER_H_
 #define _CYCLIC_NUMBER_H_
 
-#include <type_traits>
 #include <assert.h>
 #include <cstdint>
 #include <utility>
@@ -74,9 +73,7 @@ public:
 		++value_;
 
 		if (value_ >= modulus_)
-		{
 			value_ -= modulus_;
-		}
 
 		return *this;
 	}
@@ -92,9 +89,7 @@ public:
 	inline type & operator--()
 	{
 		if (value_ < (value_type)1)
-		{
 			value_ += modulus_;
-		}
 
 		--value_;
 
@@ -114,14 +109,10 @@ public:
 		value_ += number;
 
 		while (value_ >= modulus_)
-		{
 			value_ -= modulus_;
-		}
 
 		while (value_ < (value_type)0)
-		{
 			value_ += modulus_;
-		}
 
 		return *this;
 	}
@@ -129,16 +120,12 @@ public:
 	inline type & operator-=(value_type const & number)
 	{
 		while (value_ < number)
-		{
 			value_ += modulus_;
-		}
 
 		value_ -= number;
 
 		while (value_ >= modulus_)
-		{
 			value_ -= modulus_;
-		}
 
 		return *this;
 	}
@@ -165,9 +152,7 @@ public:
 		assert(validate(other.value_, modulus_));
 
 		if (value_ <= other.value_)
-		{
 			return (value_type)(other.value_ - value_);
-		}
 
 		return (value_type)((modulus_ + other.value_) - value_);
 	}
@@ -178,9 +163,7 @@ public:
 		assert(validate(other.value_, modulus_));
 
 		if (other.value_ <= value_)
-		{
 			return (value_type)(value_ - other.value_);
-		}
 
 		return (value_type)((modulus_ + value_) - other.value_);
 	}
@@ -206,14 +189,10 @@ public:
 		value_type result{ value };
 
 		while (result >= modulus)
-		{
 			result -= modulus;
-		}
 
 		while (result < (value_type)0)
-		{
 			result += modulus;
-		}
 
 		return result;
 	}

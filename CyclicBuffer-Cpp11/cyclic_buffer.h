@@ -4,9 +4,9 @@
 #include <atomic>
 #include <assert.h>
 
-#include "spin_lock.h"
 #include "resettable_event.h"
 #include "counter_lock.h"
+#include "spin_lock.h"
 
 template<typename _Ty, bool _LockFree = false, bool _Recyclable = false>
 class cyclic_buffer;
@@ -32,7 +32,7 @@ private:
 
 	std::atomic<std::size_t> size;
 	const std::size_t capacity;
-	spin_lock sync;
+	spin_lock guard;
 
 	manual_reset_event read_enable;
 	bool terminated;
@@ -58,9 +58,7 @@ public:
 	~cyclic_buffer()
 	{
 		if (!terminated)
-		{
 			terminate();
-		}
 
 		free(data);
 	}
@@ -88,53 +86,46 @@ public:
 
 	inline value_type push(const value_type & value)
 	{
-		value_type result = *write_point;
+		value_type result{ *write_point };
 		*write_point = value;
 		(write_point == last_point ? write_point = data : ++write_point);
 
 		if (read_point == write_point)
 		{
-			sync.lock();
+			guard.lock();
 
 			if (read_point == write_point)
 			{
 				(read_point == last_point ? read_point = data : ++read_point);
-				sync.unlock();
+				guard.unlock();
 			}
 			else
 			{
-				sync.unlock();
+				guard.unlock();
 				size.fetch_add(1);
 			}
 		}
 		else
-		{
 			size.fetch_add(1);
-		}
 
 		if (!read_enable.is_set() && (size.load() > 0))
-		{
 			read_enable.set();
-		}
 
 		return result;
 	}
 
 	inline value_type pop(const value_type & value)
 	{
-		value_type result;
 		this->wait_for_data();
 
-		sync.lock();
-		result = *read_point;
+		guard.lock();
+		value_type result{ *read_point };
 		*read_point = value;
 		(read_point == last_point ? read_point = data : ++read_point);
-		sync.unlock();
+		guard.unlock();
 
 		if ((size.fetch_sub(1) == 1) && !terminated)
-		{
 			read_enable.reset();
-		}
 
 		return result;
 	}
@@ -153,32 +144,26 @@ public:
 		return *(last_point - read_point < _index ? write_point - (get_size() - _index) : read_point + _index);
 	}
 
-	inline void wait_for_data()
+	inline void wait_for_data() const
 	{
 		if (!read_enable.is_set() && !terminated)
-		{
 			read_enable.wait();
-		}
 	}
 
 	template<class _Rep, class _Period>
-	inline bool wait_for_data_for(const std::chrono::duration<_Rep, _Period>& rel_time)
+	inline bool wait_for_data_for(const std::chrono::duration<_Rep, _Period>& rel_time) const
 	{
 		if (!read_enable.is_set() && !terminated)
-		{
 			return read_enable.wait_for(rel_time);
-		}
 
 		return true;
 	}
 
 	template<class _Clock, class _Duration>
-	inline bool wait_for_data_until(const std::chrono::time_point<_Clock, _Duration>& timeout_time)
+	inline bool wait_for_data_until(const std::chrono::time_point<_Clock, _Duration>& timeout_time) const
 	{
 		if (!read_enable.is_set() && !terminated)
-		{
 			return read_enable.wait_until(timeout_time);
-		}
 
 		return true;
 	}
@@ -240,9 +225,7 @@ public:
 	~cyclic_buffer()
 	{
 		if (!terminated)
-		{
 			terminate();
-		}
 
 		free(data);
 	}
@@ -275,14 +258,10 @@ public:
 
 		value_type * offset{ write_point };
 		if (!read_point.compare_exchange_strong(offset, offset == last_point ? data : offset + 1))
-		{
 			size.fetch_add(1);
-		}
 
 		if (!read_enable.is_set() && (size.load() > 0))
-		{
 			read_enable.set();
-		}
 	}
 
 	inline value_type pop()
@@ -295,9 +274,7 @@ public:
 		} while (!read_point.compare_exchange_weak(offset, offset == last_point ? data : offset + 1));
 
 		if ((size.fetch_sub(1) == 1) && !terminated)
-		{
 			read_enable.reset();
-		}
 
 		return result;
 	}
@@ -316,32 +293,26 @@ public:
 		return *(last_point - read_point < _index ? write_point - (get_size() - _index) : read_point + _index);
 	}
 
-	inline void wait_for_data()
+	inline void wait_for_data() const
 	{
 		if (!read_enable.is_set() && !terminated)
-		{
 			read_enable.wait();
-		}
 	}
 
 	template<class _Rep, class _Period>
-	inline bool wait_for_data_for(const std::chrono::duration<_Rep, _Period>& rel_time)
+	inline bool wait_for_data_for(const std::chrono::duration<_Rep, _Period>& rel_time) const
 	{
 		if (!read_enable.is_set() && !terminated)
-		{
 			return read_enable.wait_for(rel_time);
-		}
 
 		return true;
 	}
 
 	template<class _Clock, class _Duration>
-	inline bool wait_for_data_until(const std::chrono::time_point<_Clock, _Duration>& timeout_time)
+	inline bool wait_for_data_until(const std::chrono::time_point<_Clock, _Duration>& timeout_time) const
 	{
 		if (!read_enable.is_set() && !terminated)
-		{
 			return read_enable.wait_until(timeout_time);
-		}
 
 		return true;
 	}
@@ -397,9 +368,7 @@ public:
 	~cyclic_buffer()
 	{
 		if (!size.is_terminated())
-		{
 			size.terminate();
-		}
 
 		free(data);
 	}
@@ -428,7 +397,7 @@ public:
 	{
 		this->wait_for_space();
 
-		value_type result = *write_point;
+		value_type result{ *write_point };
 		*write_point = value;
 		(write_point == last_point ? write_point = data : ++write_point);
 
@@ -441,7 +410,7 @@ public:
 	{
 		this->wait_for_data();
 
-		value_type result = *read_point;
+		value_type result{ *read_point };
 		*read_point = value;
 		(read_point == last_point ? read_point = data : ++read_point);
 
@@ -464,62 +433,50 @@ public:
 		return *(last_point - read_point < _index ? write_point - (get_size() - _index) : read_point + _index);
 	}
 
-	inline void wait_for_space()
+	inline void wait_for_space() const
 	{
 		if (size.get_value() == capacity)
-		{
 			size.wait_for_add();
-		}
 	}
 
 	template<class _Rep, class _Period>
-	inline bool wait_for_space_for(const std::chrono::duration<_Rep, _Period>& rel_time)
+	inline bool wait_for_space_for(const std::chrono::duration<_Rep, _Period>& rel_time) const
 	{
 		if (size.get_value() == capacity)
-		{
 			return size.wait_for_add_for(rel_time);
-		}
 
 		return true;
 	}
 
 	template<class _Clock, class _Duration>
-	inline bool wait_for_space_until(const std::chrono::time_point<_Clock, _Duration>& timeout_time)
+	inline bool wait_for_space_until(const std::chrono::time_point<_Clock, _Duration>& timeout_time) const
 	{
 		if (size.get_value() == capacity)
-		{
 			return size.wait_for_add_until(timeout_time);
-		}
 
 		return true;
 	}
 
-	inline void wait_for_data()
+	inline void wait_for_data() const
 	{
 		if (size.get_value() == 0)
-		{
 			size.wait_for_sub();
-		}
 	}
 
 	template<class _Rep, class _Period>
-	inline bool wait_for_data(const std::chrono::duration<_Rep, _Period>& rel_time)
+	inline bool wait_for_data_for(const std::chrono::duration<_Rep, _Period>& rel_time) const
 	{
 		if (size.get_value() == 0)
-		{
 			return size.wait_for_sub_for(rel_time);
-		}
 
 		return true;
 	}
 
 	template<class _Clock, class _Duration>
-	inline bool wait_for_data(const std::chrono::time_point<_Clock, _Duration>& timeout_time)
+	inline bool wait_for_data_until(const std::chrono::time_point<_Clock, _Duration>& timeout_time) const
 	{
 		if (size.get_value() == 0)
-		{
 			return size.wait_for_sub_until(timeout_time);
-		}
 
 		return true;
 	}
@@ -575,9 +532,7 @@ public:
 	~cyclic_buffer()
 	{
 		if (!size.is_terminated())
-		{
 			size.terminate();
-		}
 
 		free(data);
 	}
@@ -616,7 +571,7 @@ public:
 	{
 		this->wait_for_data();
 
-		value_type result = *read_point;
+		value_type result{ *read_point };
 		(read_point == last_point ? read_point = data : ++read_point);
 
 		size.sub();
@@ -638,62 +593,50 @@ public:
 		return *(last_point - read_point < _index ? write_point - (get_size() - _index) : read_point + _index);
 	}
 
-	inline void wait_for_space()
+	inline void wait_for_space() const
 	{
 		if (size.get_value() == capacity)
-		{
 			size.wait_for_add();
-		}
 	}
 
 	template<class _Rep, class _Period>
-	inline bool wait_for_space_for(const std::chrono::duration<_Rep, _Period>& rel_time)
+	inline bool wait_for_space_for(const std::chrono::duration<_Rep, _Period>& rel_time) const
 	{
 		if (size.get_value() == capacity)
-		{
 			return size.wait_for_add_for(rel_time);
-		}
 
 		return true;
 	}
 
 	template<class _Clock, class _Duration>
-	inline bool wait_for_space_until(const std::chrono::time_point<_Clock, _Duration>& timeout_time)
+	inline bool wait_for_space_until(const std::chrono::time_point<_Clock, _Duration>& timeout_time) const
 	{
 		if (size.get_value() == capacity)
-		{
 			return size.wait_for_add_until(timeout_time);
-		}
 
 		return true;
 	}
 
-	inline void wait_for_data()
+	inline void wait_for_data() const
 	{
 		if (size.get_value() == 0)
-		{
 			size.wait_for_sub();
-		}
 	}
 
 	template<class _Rep, class _Period>
-	inline bool wait_for_data(const std::chrono::duration<_Rep, _Period>& rel_time)
+	inline bool wait_for_data_for(const std::chrono::duration<_Rep, _Period>& rel_time) const
 	{
 		if (size.get_value() == 0)
-		{
 			return size.wait_for_sub_for(rel_time);
-		}
 
 		return true;
 	}
 
 	template<class _Clock, class _Duration>
-	inline bool wait_for_data(const std::chrono::time_point<_Clock, _Duration>& timeout_time)
+	inline bool wait_for_data_until(const std::chrono::time_point<_Clock, _Duration>& timeout_time) const
 	{
 		if (size.get_value() == 0)
-		{
 			return size.wait_for_sub_until(timeout_time);
-		}
 
 		return true;
 	}
@@ -766,7 +709,7 @@ public:
 		(front_point == data ? front_point = last_point : --front_point);
 		++size;
 
-		value_type result = *front_point;
+		value_type result{ *front_point };
 		*front_point = _value;
 
 		return result;
@@ -776,15 +719,11 @@ public:
 	{
 		(front_point == data ? front_point = last_point : --front_point);
 		if (size == capacity)
-		{
 			back_point = front_point;
-		}
 		else
-		{
 			++size;
-		}
 
-		value_type result = *front_point;
+		value_type result{ *front_point };
 		*front_point = _value;
 
 		return result;
@@ -794,7 +733,7 @@ public:
 	{
 		assert(size < capacity);
 
-		value_type result = *back_point;
+		value_type result{ *back_point };
 		*back_point = _value;
 
 		(back_point == last_point ? back_point = data : ++back_point);
@@ -805,18 +744,14 @@ public:
 
 	inline value_type force_push_back(value_type const & _value)
 	{
-		value_type result = *back_point;
+		value_type result{ *back_point };
 		*back_point = _value;
 
 		(back_point == last_point ? back_point = data : ++back_point);
 		if (size == capacity)
-		{
 			front_point = back_point;
-		}
 		else
-		{
 			++size;
-		}
 
 		return result;
 	}
@@ -825,7 +760,7 @@ public:
 	{
 		assert(size > (std::size_t)0);
 
-		value_type result = *front_point;
+		value_type result{ *front_point };
 
 		(front_point == last_point ? front_point = data : ++front_point);
 		--size;
@@ -837,7 +772,7 @@ public:
 	{
 		assert(size > (std::size_t)0);
 
-		value_type result = *front_point;
+		value_type result{ *front_point };
 		*front_point = _value;
 
 		(front_point == last_point ? front_point = data : ++front_point);
@@ -863,7 +798,7 @@ public:
 		(back_point == data ? back_point = last_point : --back_point);
 		--size;
 
-		value_type result = *back_point;
+		value_type result{ *back_point };
 		*back_point = _value;
 
 		return result;

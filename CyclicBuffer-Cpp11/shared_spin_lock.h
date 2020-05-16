@@ -17,11 +17,10 @@ public:
 	{
 		int copy = state.load();
 
-		do {
+		do
+		{
 			if (copy == -1)
-			{
 				return false;
-			}
 		} while (!state.compare_exchange_strong(copy, copy + 1));
 
 		return true;
@@ -31,11 +30,10 @@ public:
 	{
 		int copy = state.load();
 
-		do {
+		do
+		{
 			if (copy == -1)
-			{
 				copy = 0;
-			}
 		} while (!state.compare_exchange_strong(copy, copy + 1));
 	}
 
@@ -43,11 +41,10 @@ public:
 	{
 		int copy = state.load();
 
-		do {
+		do
+		{
 			if (copy <= 0)
-			{
 				return;
-			}
 		} while (!state.compare_exchange_strong(copy, copy - 1));
 	}
 
@@ -63,9 +60,7 @@ public:
 		int expected = 0;
 
 		while (!state.compare_exchange_strong(expected, -1))
-		{
 			expected = 0;
-		}
 	}
 
 	inline void unlock()

@@ -14,9 +14,7 @@ cyclic_buffer<int32_t, IS_LOCK_FREE, IS_RECYCLABLE> buffer(10);
 void producer()
 {
 	for (int32_t cnt = 0; !buffer.is_terminated(); ++cnt)
-	{
 		buffer.push(cnt);
-	}
 
 	printf("producer say goodbye\n");
 }
@@ -28,7 +26,7 @@ void consumer()
 	buffer.wait_for_data();
 	auto _1{ std::chrono::high_resolution_clock::now() };
 
-	for (cnt = 0; cnt < 100000000; ++cnt)
+	for (cnt = 0; cnt < 100'000'000; ++cnt)
 	{
 #if IS_RECYCLABLE
 		curr = buffer.pop(0);
@@ -37,9 +35,7 @@ void consumer()
 #endif
 
 		if (curr < last)
-		{
 			printf("Error: %d : %d \n", cnt, curr);
-		}
 
 		last = curr;
 	}
