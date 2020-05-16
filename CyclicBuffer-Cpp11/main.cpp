@@ -14,7 +14,13 @@ cyclic_buffer<int32_t, IS_LOCK_FREE, IS_RECYCLABLE> buffer(10);
 void producer()
 {
 	for (int32_t cnt = 0; !buffer.is_terminated(); ++cnt)
+	{
+#if IS_LOCK_FREE
+		while (!buffer.try_push(cnt) && !buffer.is_terminated());
+#else
 		buffer.push(cnt);
+#endif
+	}
 
 	printf("producer say goodbye\n");
 }

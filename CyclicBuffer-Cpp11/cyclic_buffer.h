@@ -114,6 +114,21 @@ public:
 		return result;
 	}
 
+	inline bool try_push(const value_type & value, value_type & result)
+	{
+		if ((write_point == last_point ? data : write_point + 1) == read_point.load())
+		{
+			if (!read_enable.is_set() && (size.load() > 0))
+				read_enable.set();
+
+			return false;
+		}
+
+		result = this->push(value);
+
+		return true;
+	}
+
 	inline value_type pop(const value_type & value)
 	{
 		this->wait_for_data();
@@ -262,6 +277,21 @@ public:
 
 		if (!read_enable.is_set() && (size.load() > 0))
 			read_enable.set();
+	}
+
+	inline bool try_push(const value_type & value)
+	{
+		if ((write_point == last_point ? data : write_point + 1) == read_point.load())
+		{
+			if (!read_enable.is_set() && (size.load() > 0))
+				read_enable.set();
+
+			return false;
+		}
+
+		this->push(value);
+
+		return true;
 	}
 
 	inline value_type pop()
